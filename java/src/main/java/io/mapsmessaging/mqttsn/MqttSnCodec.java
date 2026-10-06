@@ -64,6 +64,306 @@ public final class MqttSnCodec {
   }
 
 
+
+  public static byte[] encodeRegister(int packetIdentifier, String topicName) {
+    if (packetIdentifier < 1 || packetIdentifier > 0xFFFF) {
+      throw new IllegalArgumentException("packetIdentifier must be 1..65535");
+    }
+    MqttSnTopics.validateName(topicName);
+    byte[] topic = topicName.getBytes(StandardCharsets.UTF_8);
+    ByteBuffer body = ByteBuffer.allocate(3 + topic.length);
+    body.put((byte) 0x00);
+    body.putShort((short) packetIdentifier);
+    body.put(topic);
+    return encode(PacketType.REGISTER, body.array());
+  }
+
+  public static byte[] encodePublish(PublishOptions options) {
+    Objects.requireNonNull(options, "options");
+    byte[] topicName = options.topic().type() == TopicType.NAME
+        ? options.topic().name().getBytes(StandardCharsets.UTF_8)
+        : new byte[0];
+    byte[] payload = options.payload();
+    int packetIdLength = options.qos() == QoS.AT_MOST_ONCE ? 0 : 2;
+    int bodyLength = 1 + packetIdLength + 2 + topicName.length + payload.length;
+    ByteBuffer body = ByteBuffer.allocate(bodyLength);
+
+    int flags = options.topic().type().value();
+    if (options.retain()) {
+      flags |= 0x10;
+    }
+    flags |= options.qos().value() << 5;
+    if (options.duplicate()) {
+      flags |= 0x80;
+    }
+    body.put((byte) flags);
+
+    if (packetIdLength != 0) {
+      body.putShort((short) options.packetIdentifier());
+    }
+
+    if (options.topic().type() == TopicType.NAME) {
+      body.putShort((short) topicName.length);
+      body.put(topicName);
+    } else {
+      body.putShort((short) options.topic().alias());
+    }
+    body.put(payload);
+    return encode(PacketType.PUBLISH, body.array());
+  }
+
+  public static PublishPacket decodePublish(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.PUBLISH) {
+      throw malformed("Expected PUBLISH");
+    }
+
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    requireRemaining(body, 3, "PUBLISH");
+    int flags = Byte.toUnsignedInt(body.get());
+    if ((flags & 0x0C) != 0) {
+      throw malformed("PUBLISH reserved flags are non-zero");
+    }
+
+    TopicType topicType = TopicType.fromValue(flags & 0x03);
+    QoS qos = QoS.fromValue((flags >>> 5) & 0x03);
+    boolean duplicate = (flags & 0x80) != 0;
+    boolean retain = (flags & 0x10) != 0;
+    if (duplicate && qos != QoS.EXACTLY_ONCE) {
+      throw malformed("DUP is only valid for QoS 2");
+    }
+
+    int packetIdentifier = 0;
+    if (qos != QoS.AT_MOST_ONCE) {
+      requireRemaining(body, 2, "PUBLISH Packet Identifier");
+      packetIdentifier = Short.toUnsignedInt(body.getShort());
+      if (packetIdentifier == 0) {
+        throw malformed("PUBLISH Packet Identifier must be non-zero");
+      }
+    }
+
+    requireRemaining(body, 2, "PUBLISH topic value");
+    int topicValue = Short.toUnsignedInt(body.getShort());
+    TopicRef topic;
+    if (topicType == TopicType.NAME) {
+      requireRemaining(body, topicValue, "PUBLISH Topic Name");
+      ByteBuffer topicBytes = body.slice();
+      topicBytes.limit(topicValue);
+      String name = MqttSnUtf8.decode(topicBytes);
+      MqttSnTopics.validateName(name);
+      topic = TopicRef.name(name);
+      body.position(body.position() + topicValue);
+    } else {
+      if (topicValue == 0) {
+        throw malformed("Topic Alias must be non-zero");
+      }
+      topic = topicType == TopicType.SESSION_ALIAS
+          ? TopicRef.sessionAlias(topicValue)
+          : TopicRef.predefinedAlias(topicValue);
+    }
+
+    byte[] payload = new byte[body.remaining()];
+    body.get(payload);
+    return new PublishPacket(qos, duplicate, retain, packetIdentifier, topic, payload);
+  }
+
+  public static byte[] encodeSubscribe(SubscribeOptions options) {
+    Objects.requireNonNull(options, "options");
+    byte[] topic = options.topic().type() == TopicType.NAME
+        ? options.topic().name().getBytes(StandardCharsets.UTF_8)
+        : new byte[2];
+    if (options.topic().type() != TopicType.NAME) {
+      ByteBuffer.wrap(topic).putShort((short) options.topic().alias());
+    }
+
+    int flags = options.topic().type().value()
+        | (options.retainHandling() << 2)
+        | (options.maximumQos().value() << 5);
+    if (options.retainAsPublished()) {
+      flags |= 0x10;
+    }
+    if (options.noLocal()) {
+      flags |= 0x80;
+    }
+
+    ByteBuffer body = ByteBuffer.allocate(3 + topic.length);
+    body.put((byte) flags);
+    body.putShort((short) options.packetIdentifier());
+    body.put(topic);
+    return encode(PacketType.SUBSCRIBE, body.array());
+  }
+
+  public static SubAck decodeSubAck(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.SUBACK) {
+      throw malformed("Expected SUBACK");
+    }
+
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    requireRemaining(body, 3, "SUBACK");
+    int flags = Byte.toUnsignedInt(body.get());
+    if ((flags & 0xF8) != 0) {
+      throw malformed("SUBACK reserved flags are non-zero");
+    }
+
+    TopicType topicType = TopicType.fromValue(flags & 0x03);
+    if (topicType == TopicType.NAME) {
+      throw malformed("SUBACK Topic Type must be a Topic Alias");
+    }
+
+    int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    Integer topicAlias = null;
+    if ((flags & 0x04) != 0) {
+      requireRemaining(body, 2, "SUBACK Topic Alias");
+      topicAlias = Short.toUnsignedInt(body.getShort());
+      if (topicAlias == 0) {
+        throw malformed("SUBACK Topic Alias must be non-zero");
+      }
+    }
+
+    if (body.remaining() > 1) {
+      throw malformed("SUBACK has unexpected trailing bytes");
+    }
+    Integer reasonCode = body.hasRemaining() ? Byte.toUnsignedInt(body.get()) : null;
+    return new SubAck(topicType, topicAlias, packetIdentifier, reasonCode);
+  }
+
+  public static byte[] encodeUnsubscribe(int packetIdentifier, TopicRef topic) {
+    if (packetIdentifier < 1 || packetIdentifier > 0xFFFF) {
+      throw new IllegalArgumentException("packetIdentifier must be 1..65535");
+    }
+    Objects.requireNonNull(topic, "topic");
+    byte[] topicBytes;
+    if (topic.type() == TopicType.NAME) {
+      MqttSnTopics.validateFilter(topic.name());
+      topicBytes = topic.name().getBytes(StandardCharsets.UTF_8);
+    } else {
+      topicBytes = ByteBuffer.allocate(2).putShort((short) topic.alias()).array();
+    }
+
+    ByteBuffer body = ByteBuffer.allocate(3 + topicBytes.length);
+    body.put((byte) topic.type().value());
+    body.putShort((short) packetIdentifier);
+    body.put(topicBytes);
+    return encode(PacketType.UNSUBSCRIBE, body.array());
+  }
+
+  public static byte[] encodeAck(
+      PacketType type, int packetIdentifier, Integer reasonCode) {
+    if (!isAckType(type)) {
+      throw new IllegalArgumentException("Unsupported acknowledgement type");
+    }
+    if (packetIdentifier < 1 || packetIdentifier > 0xFFFF) {
+      throw new IllegalArgumentException("packetIdentifier must be 1..65535");
+    }
+    ByteBuffer body = ByteBuffer.allocate(reasonCode == null ? 2 : 3);
+    body.putShort((short) packetIdentifier);
+    if (reasonCode != null) {
+      body.put((byte) (reasonCode & 0xFF));
+    }
+    return encode(type, body.array());
+  }
+
+  public static Ack decodeAck(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (!isAckType(packet.type())) {
+      throw malformed("Unexpected acknowledgement type");
+    }
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    if (body.remaining() != 2 && body.remaining() != 3) {
+      throw malformed("Acknowledgement body must contain Packet Identifier and optional Reason Code");
+    }
+    int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    if (packetIdentifier == 0) {
+      throw malformed("Acknowledgement Packet Identifier must be non-zero");
+    }
+    Integer reasonCode = body.hasRemaining() ? Byte.toUnsignedInt(body.get()) : null;
+    return new Ack(packetIdentifier, reasonCode);
+  }
+
+  public static byte[] encodePingReq(int packetIdentifier) {
+    if (packetIdentifier < 1 || packetIdentifier > 0xFFFF) {
+      throw new IllegalArgumentException("packetIdentifier must be 1..65535");
+    }
+    return encode(
+        PacketType.PINGREQ,
+        ByteBuffer.allocate(2).putShort((short) packetIdentifier).array());
+  }
+
+  public static PingResp decodePingResp(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.PINGRESP) {
+      throw malformed("Expected PINGRESP");
+    }
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    if (body.remaining() != 2 && body.remaining() != 3) {
+      throw malformed("PINGRESP has invalid length");
+    }
+    int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    if (packetIdentifier == 0) {
+      throw malformed("PINGRESP Packet Identifier must be non-zero");
+    }
+    Integer remaining = body.hasRemaining() ? Byte.toUnsignedInt(body.get()) : null;
+    return new PingResp(packetIdentifier, remaining);
+  }
+
+  public static byte[] encodeSleepReq(SleepRequest request) {
+    Objects.requireNonNull(request, "request");
+    ByteBuffer body = ByteBuffer.allocate(7);
+    body.put((byte) (request.retainTopicAliases() ? 0x01 : 0x00));
+    body.putShort((short) request.packetIdentifier());
+    body.putInt((int) request.sleepDurationSeconds());
+    return encode(PacketType.SLEEPREQ, body.array());
+  }
+
+  public static SleepResponse decodeSleepResp(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.SLEEPRESP) {
+      throw malformed("Expected SLEEPRESP");
+    }
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    requireRemaining(body, 3, "SLEEPRESP");
+    int flags = Byte.toUnsignedInt(body.get());
+    if ((flags & 0xFE) != 0) {
+      throw malformed("SLEEPRESP reserved flags are non-zero");
+    }
+    int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    if (packetIdentifier == 0) {
+      throw malformed("SLEEPRESP Packet Identifier must be non-zero");
+    }
+
+    Long duration = null;
+    if ((flags & 0x01) != 0) {
+      requireRemaining(body, 4, "SLEEPRESP Sleep Duration");
+      duration = Integer.toUnsignedLong(body.getInt());
+      if (duration == 0) {
+        throw malformed("SLEEPRESP Sleep Duration must be greater than zero");
+      }
+    }
+
+    if (body.remaining() > 1) {
+      throw malformed("SLEEPRESP has unexpected trailing bytes");
+    }
+    Integer reasonCode = body.hasRemaining() ? Byte.toUnsignedInt(body.get()) : null;
+    return new SleepResponse(packetIdentifier, duration, reasonCode);
+  }
+
+  public static byte[] encodeWakeup() {
+    return encode(PacketType.WAKEUP, new byte[0]);
+  }
+
+  private static boolean isAckType(PacketType type) {
+    return type == PacketType.PUBACK
+        || type == PacketType.PUBREC
+        || type == PacketType.PUBREL
+        || type == PacketType.PUBCOMP
+        || type == PacketType.UNSUBACK;
+  }
+
+  private static MqttSnException malformed(String message) {
+    return new MqttSnException(MqttSnError.MALFORMED_PACKET, message);
+  }
+
   public static byte[] encodeConnect(ConnectOptions options) {
     Objects.requireNonNull(options, "options");
 
