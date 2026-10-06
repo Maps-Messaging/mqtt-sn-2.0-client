@@ -1,0 +1,116 @@
+{
+  "specification": "MQTT-SN 2.0 CSD01",
+  "date": "2026-08-14",
+  "sourceCommit": "0dae5066d123d068ddca2ddb861ce8858aafee92",
+  "section": "2.1.3",
+  "packetTypes": [
+    {
+      "name": "CONNECT",
+      "value": 1
+    },
+    {
+      "name": "CONNACK",
+      "value": 2
+    },
+    {
+      "name": "PUBLISH",
+      "value": 3
+    },
+    {
+      "name": "PUBACK",
+      "value": 4
+    },
+    {
+      "name": "PUBREC",
+      "value": 5
+    },
+    {
+      "name": "PUBREL",
+      "value": 6
+    },
+    {
+      "name": "PUBCOMP",
+      "value": 7
+    },
+    {
+      "name": "SUBSCRIBE",
+      "value": 8
+    },
+    {
+      "name": "SUBACK",
+      "value": 9
+    },
+    {
+      "name": "UNSUBSCRIBE",
+      "value": 10
+    },
+    {
+      "name": "UNSUBACK",
+      "value": 11
+    },
+    {
+      "name": "PINGREQ",
+      "value": 12
+    },
+    {
+      "name": "PINGRESP",
+      "value": 13
+    },
+    {
+      "name": "DISCONNECT",
+      "value": 14
+    },
+    {
+      "name": "AUTH",
+      "value": 15
+    },
+    {
+      "name": "REGISTER",
+      "value": 16
+    },
+    {
+      "name": "REGACK",
+      "value": 17
+    },
+    {
+      "name": "PUBWOS",
+      "value": 18
+    },
+    {
+      "name": "SLEEPREQ",
+      "value": 19
+    },
+    {
+      "name": "SLEEPRESP",
+      "value": 20
+    },
+    {
+      "name": "WAKEUP",
+      "value": 21
+    },
+    {
+      "name": "ADVERTISE",
+      "value": 22
+    },
+    {
+      "name": "SEARCHGW",
+      "value": 23
+    },
+    {
+      "name": "GWINFO",
+      "value": 24
+    },
+    {
+      "name": "FORWARDER_ENCAPSULATION",
+      "value": 252
+    },
+    {
+      "name": "CONNECTION_ENCAPSULATION",
+      "value": 254
+    },
+    {
+      "name": "PROTECTION_ENCAPSULATION",
+      "value": 255
+    }
+  ]
+}
