@@ -1,6 +1,7 @@
 package io.mapsmessaging.mqttsn;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 public final class MqttSnCodec {
@@ -60,6 +61,117 @@ public final class MqttSnCodec {
     body = body.slice().asReadOnlyBuffer();
 
     return new DecodedPacket(type, body, packetLength, headerLength);
+  }
+
+
+  public static byte[] encodeConnect(ConnectOptions options) {
+    Objects.requireNonNull(options, "options");
+
+    byte[] clientIdentifier = options.clientIdentifier().getBytes(StandardCharsets.UTF_8);
+    ByteBuffer body = ByteBuffer.allocate(8 + clientIdentifier.length);
+    int flags = 0;
+    if (options.cleanStart()) {
+      flags |= 0x01;
+    }
+    if (options.allowNetworkAddressChanges()) {
+      flags |= 0x20;
+    }
+    if (options.allowServerSuggestedValues()) {
+      flags |= 0x40;
+    }
+
+    body.put((byte) flags);
+    body.putShort((short) options.packetIdentifier());
+    body.put((byte) 0x02);
+    body.putShort((short) options.keepAliveSeconds());
+    body.putShort((short) options.maximumPacketSize());
+    body.put(clientIdentifier);
+
+    return encode(PacketType.CONNECT, body.array());
+  }
+
+  public static ConnAck decodeConnAck(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.CONNACK) {
+      throw new MqttSnException(MqttSnError.MALFORMED_PACKET, "Expected CONNACK");
+    }
+
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    if (body.remaining() < 4) {
+      throw new MqttSnException(MqttSnError.MALFORMED_PACKET, "CONNACK is too short");
+    }
+
+    int flags = Byte.toUnsignedInt(body.get());
+    if ((flags & 0xF0) != 0) {
+      throw new MqttSnException(MqttSnError.MALFORMED_PACKET, "CONNACK reserved flags are non-zero");
+    }
+
+    boolean sessionPresent = (flags & 0x01) != 0;
+    int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    int reasonCode = Byte.toUnsignedInt(body.get());
+    if (sessionPresent && reasonCode != 0) {
+      throw new MqttSnException(
+          MqttSnError.MALFORMED_PACKET,
+          "CONNACK Session Present must be zero on failure");
+    }
+
+    Long sessionExpiry = null;
+    if ((flags & 0x02) != 0) {
+      requireRemaining(body, 4, "CONNACK Session Expiry Interval");
+      sessionExpiry = Integer.toUnsignedLong(body.getInt());
+    }
+
+    Integer serverKeepAlive = null;
+    if ((flags & 0x04) != 0) {
+      requireRemaining(body, 2, "CONNACK Server Keep Alive");
+      serverKeepAlive = Short.toUnsignedInt(body.getShort());
+      if (serverKeepAlive == 0) {
+        throw new MqttSnException(
+            MqttSnError.MALFORMED_PACKET,
+            "CONNACK Server Keep Alive must be greater than zero");
+      }
+    }
+
+    String authenticationMethod = null;
+    byte[] authenticationData = null;
+    if ((flags & 0x08) != 0) {
+      requireRemaining(body, 1, "CONNACK Authentication Method Length");
+      int methodLength = Byte.toUnsignedInt(body.get());
+      requireRemaining(body, methodLength + 2, "CONNACK Authentication Method");
+      ByteBuffer method = body.slice();
+      method.limit(methodLength);
+      authenticationMethod = MqttSnUtf8.decode(method);
+      body.position(body.position() + methodLength);
+
+      int dataLength = Short.toUnsignedInt(body.getShort());
+      requireRemaining(body, dataLength, "CONNACK Authentication Data");
+      authenticationData = new byte[dataLength];
+      body.get(authenticationData);
+    }
+
+    String assignedClientIdentifier = "";
+    if (body.hasRemaining()) {
+      assignedClientIdentifier = MqttSnUtf8.decode(body);
+      body.position(body.limit());
+    }
+
+    return new ConnAck(
+        sessionPresent,
+        packetIdentifier,
+        reasonCode,
+        sessionExpiry,
+        serverKeepAlive,
+        authenticationMethod,
+        authenticationData,
+        assignedClientIdentifier);
+  }
+
+  private static void requireRemaining(ByteBuffer buffer, int required, String field) {
+    if (buffer.remaining() < required) {
+      throw new MqttSnException(
+          MqttSnError.MALFORMED_PACKET,
+          field + " is truncated");
+    }
   }
 
   /**
