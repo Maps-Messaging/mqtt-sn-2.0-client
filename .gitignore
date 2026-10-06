@@ -1,0 +1,12 @@
+build/
+target/
+*.class
+*.o
+*.a
+__pycache__/
+.pytest_cache/
+.venv/
+*.egg-info/
+.idea/
+.vscode/
+.DS_Store
