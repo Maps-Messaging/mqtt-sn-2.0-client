@@ -3,6 +3,7 @@ project(mqttsn2_c VERSION 0.1.0 LANGUAGES C)
 
 add_library(mqttsn2 STATIC
     src/mqttsn.c
+    src/packets.c
 )
 target_include_directories(mqttsn2
     PUBLIC
