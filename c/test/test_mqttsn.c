@@ -198,6 +198,24 @@ static void test_connack_rejects_reserved_flags_and_failed_session_present(void)
   assert(mqttsn_decode_connack(&packet, &connack) == MQTTSN_MALFORMED_PACKET);
 }
 
+
+static void test_topic_validation(void) {
+  const uint8_t topic[] = "sensors/temperature";
+  const uint8_t invalid_name[] = "sensors/+";
+  const uint8_t filter_multi[] = "sensors/#";
+  const uint8_t filter_single[] = "sensors/+/temperature";
+  const uint8_t invalid_hash[] = "sensors/#/temperature";
+  const uint8_t invalid_plus[] = "sensors/temp+";
+
+  assert(mqttsn_topic_name_is_valid(topic, sizeof(topic) - 1u));
+  assert(!mqttsn_topic_name_is_valid(invalid_name, sizeof(invalid_name) - 1u));
+  assert(mqttsn_topic_filter_is_valid(filter_multi, sizeof(filter_multi) - 1u));
+  assert(mqttsn_topic_filter_is_valid(filter_single, sizeof(filter_single) - 1u));
+  assert(!mqttsn_topic_filter_is_valid(invalid_hash, sizeof(invalid_hash) - 1u));
+  assert(!mqttsn_topic_filter_is_valid(invalid_plus, sizeof(invalid_plus) - 1u));
+  assert(!mqttsn_topic_filter_is_valid(NULL, 0u));
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -208,5 +226,6 @@ int main(void) {
   test_basic_connect();
   test_connack_decode();
   test_connack_rejects_reserved_flags_and_failed_session_present();
+  test_topic_validation();
   return 0;
 }
