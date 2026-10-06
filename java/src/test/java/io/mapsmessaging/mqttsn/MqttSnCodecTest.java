@@ -60,4 +60,59 @@ class MqttSnCodecTest {
     assertEquals(2, consumed);
     assertEquals(List.of(PacketType.PINGREQ), types);
   }
+
+  @Test
+  void encodesStrictBaseConnect() {
+    ConnectOptions options = new ConnectOptions(
+        true, false, false, 0x1234, 60, 0, "client1");
+
+    byte[] encoded = MqttSnCodec.encodeConnect(options);
+
+    assertArrayEquals(
+        new byte[] {
+            0x11, 0x01, 0x01, 0x12, 0x34, 0x02, 0x00, 0x3C,
+            0x00, 0x00, 'c', 'l', 'i', 'e', 'n', 't', '1'
+        },
+        encoded);
+  }
+
+  @Test
+  void decodesConnAckWithSuggestedValues() {
+    byte[] encoded = new byte[] {
+        0x0C, 0x02,
+        0x06,
+        0x12, 0x34,
+        0x00,
+        0x00, 0x00, 0x00, 0x78,
+        0x00, 0x3C
+    };
+
+    ConnAck connAck = MqttSnCodec.decodeConnAck(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+
+    assertEquals(0x1234, connAck.packetIdentifier());
+    assertEquals(0, connAck.reasonCode());
+    assertEquals(120L, connAck.sessionExpiryInterval());
+    assertEquals(60, connAck.serverKeepAlive());
+  }
+
+  @Test
+  void rejectsConnAckReservedFlags() {
+    DecodedPacket packet = MqttSnCodec.decode(
+        ByteBuffer.wrap(new byte[] {0x06, 0x02, (byte) 0x80, 0x00, 0x01, 0x00}));
+
+    MqttSnException error = assertThrows(
+        MqttSnException.class,
+        () -> MqttSnCodec.decodeConnAck(packet));
+
+    assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
+  }
+
+  @Test
+  void rejectsNullInMqttSnUtf8() {
+    assertThrows(
+        MqttSnException.class,
+        () -> new ConnectOptions(true, false, false, 1, 60, 0, "a\0b"));
+  }
+
 }
