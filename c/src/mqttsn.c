@@ -242,6 +242,48 @@ int mqttsn_utf8_is_valid(const uint8_t *data, size_t length) {
   return 1;
 }
 
+
+int mqttsn_topic_name_is_valid(const uint8_t *data, size_t length) {
+  size_t i;
+
+  if (length == 0u || length > MQTTSN_MAX_PACKET_SIZE ||
+      !mqttsn_utf8_is_valid(data, length)) {
+    return 0;
+  }
+
+  for (i = 0u; i < length; i++) {
+    if (data[i] == (uint8_t)'+' || data[i] == (uint8_t)'#') {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+int mqttsn_topic_filter_is_valid(const uint8_t *data, size_t length) {
+  size_t i;
+
+  if (length == 0u || length > MQTTSN_MAX_PACKET_SIZE ||
+      !mqttsn_utf8_is_valid(data, length)) {
+    return 0;
+  }
+
+  for (i = 0u; i < length; i++) {
+    if (data[i] == (uint8_t)'#') {
+      if (i + 1u != length ||
+          (i != 0u && data[i - 1u] != (uint8_t)'/')) {
+        return 0;
+      }
+    } else if (data[i] == (uint8_t)'+') {
+      if ((i != 0u && data[i - 1u] != (uint8_t)'/') ||
+          (i + 1u != length && data[i + 1u] != (uint8_t)'/')) {
+        return 0;
+      }
+    }
+  }
+
+  return 1;
+}
+
 mqttsn_status_t mqttsn_encode_connect(
     const mqttsn_connect_options_t *options,
     uint8_t *output,
