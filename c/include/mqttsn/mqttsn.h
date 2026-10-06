@@ -90,6 +90,67 @@ mqttsn_status_t mqttsn_encode_packet(
     size_t output_capacity,
     size_t *written);
 
+
+typedef struct {
+  uint8_t clean_start;
+  uint8_t allow_network_address_changes;
+  uint8_t allow_server_suggested_values;
+  uint16_t packet_identifier;
+  uint16_t keep_alive;
+  uint16_t maximum_packet_size;
+  const uint8_t *client_identifier;
+  size_t client_identifier_length;
+} mqttsn_connect_options_t;
+
+typedef struct {
+  uint8_t session_present;
+  uint16_t packet_identifier;
+  uint8_t reason_code;
+  uint8_t has_session_expiry_interval;
+  uint32_t session_expiry_interval;
+  uint8_t has_server_keep_alive;
+  uint16_t server_keep_alive;
+  uint8_t has_authentication;
+  const uint8_t *authentication_method;
+  size_t authentication_method_length;
+  const uint8_t *authentication_data;
+  size_t authentication_data_length;
+  const uint8_t *assigned_client_identifier;
+  size_t assigned_client_identifier_length;
+} mqttsn_connack_view_t;
+
+/*
+ * Validate MQTT-SN UTF-8 according to MQTT-SN-1.8.4-1 and
+ * MQTT-SN-1.8.4-2. U+FEFF is accepted and preserved as required by
+ * MQTT-SN-1.8.4-3.
+ */
+int mqttsn_utf8_is_valid(const uint8_t *data, size_t length);
+
+/*
+ * Encode the mandatory CONNECT fields plus an optional Client Identifier.
+ * Will, Authentication, Session Expiry and Maximum Awake Messages are
+ * separate extensions to this structure and are not silently emitted.
+ *
+ * Enforces MQTT-SN-2.2-1, MQTT-SN-3.1.2-1, MQTT-SN-3.1.5-1,
+ * MQTT-SN-3.1.6-4, MQTT-SN-3.1.7-1 and MQTT-SN-3.1.18-1.
+ */
+mqttsn_status_t mqttsn_encode_connect(
+    const mqttsn_connect_options_t *options,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+/*
+ * Decode and validate a CONNACK body received from a Server.
+ *
+ * Enforces reserved flag validation (MQTT-SN-3.2.2-2), optional-field
+ * presence rules, and the Session Present/non-success constraint
+ * MQTT-SN-3.2.2.1-5.
+ */
+mqttsn_status_t mqttsn_decode_connack(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_connack_view_t *connack);
+
 typedef mqttsn_status_t (*mqttsn_packet_handler_t)(
     void *context,
     const mqttsn_packet_view_t *packet);
