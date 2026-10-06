@@ -92,11 +92,121 @@ static void test_multiple_packets(void) {
   assert(consumed == sizeof(input));
 }
 
+
+static void test_utf8_validation(void) {
+  const uint8_t ascii[] = {'c', 'l', 'i', 'e', 'n', 't'};
+  const uint8_t bom[] = {0xEF, 0xBB, 0xBF, 'x'};
+  const uint8_t nul[] = {'a', 0x00, 'b'};
+  const uint8_t overlong[] = {0xC0, 0x80};
+  const uint8_t surrogate[] = {0xED, 0xA0, 0x80};
+
+  assert(mqttsn_utf8_is_valid(ascii, sizeof(ascii)));
+  assert(mqttsn_utf8_is_valid(bom, sizeof(bom)));
+  assert(!mqttsn_utf8_is_valid(nul, sizeof(nul)));
+  assert(!mqttsn_utf8_is_valid(overlong, sizeof(overlong)));
+  assert(!mqttsn_utf8_is_valid(surrogate, sizeof(surrogate)));
+}
+
+static void test_basic_connect(void) {
+  const uint8_t client_id[] = "client1";
+  const uint8_t expected[] = {
+      0x11, MQTTSN_CONNECT,
+      0x01,
+      0x12, 0x34,
+      0x02,
+      0x00, 0x3C,
+      0x00, 0x00,
+      'c', 'l', 'i', 'e', 'n', 't', '1'
+  };
+  mqttsn_connect_options_t options = {
+      .clean_start = 1u,
+      .allow_network_address_changes = 0u,
+      .allow_server_suggested_values = 0u,
+      .packet_identifier = 0x1234u,
+      .keep_alive = 60u,
+      .maximum_packet_size = 0u,
+      .client_identifier = client_id,
+      .client_identifier_length = sizeof(client_id) - 1u
+  };
+  uint8_t output[64];
+  size_t written = 0u;
+
+  assert(mqttsn_encode_connect(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(written == sizeof(expected));
+  assert(memcmp(output, expected, sizeof(expected)) == 0);
+
+  options.packet_identifier = 0u;
+  assert(mqttsn_encode_connect(
+      &options, output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+  options.packet_identifier = 1u;
+
+  options.keep_alive = 0u;
+  assert(mqttsn_encode_connect(
+      &options, output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+  options.keep_alive = 60u;
+
+  options.maximum_packet_size = 9u;
+  assert(mqttsn_encode_connect(
+      &options, output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+}
+
+static void test_connack_decode(void) {
+  const uint8_t bytes[] = {
+      0x0C, MQTTSN_CONNACK,
+      0x06,
+      0x12, 0x34,
+      0x00,
+      0x00, 0x00, 0x00, 0x78,
+      0x00, 0x3C
+  };
+  mqttsn_packet_view_t packet;
+  mqttsn_connack_view_t connack;
+  size_t consumed = 0u;
+
+  assert(mqttsn_decode_packet(
+      bytes, sizeof(bytes), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_connack(&packet, &connack) == MQTTSN_OK);
+  assert(connack.session_present == 0u);
+  assert(connack.packet_identifier == 0x1234u);
+  assert(connack.reason_code == 0u);
+  assert(connack.has_session_expiry_interval == 1u);
+  assert(connack.session_expiry_interval == 120u);
+  assert(connack.has_server_keep_alive == 1u);
+  assert(connack.server_keep_alive == 60u);
+  assert(connack.has_authentication == 0u);
+  assert(connack.assigned_client_identifier_length == 0u);
+}
+
+static void test_connack_rejects_reserved_flags_and_failed_session_present(void) {
+  const uint8_t reserved_bytes[] = {
+      0x06, MQTTSN_CONNACK, 0x80, 0x00, 0x01, 0x00
+  };
+  const uint8_t failed_session_bytes[] = {
+      0x06, MQTTSN_CONNACK, 0x01, 0x00, 0x01, 0x80
+  };
+  mqttsn_packet_view_t packet;
+  mqttsn_connack_view_t connack;
+  size_t consumed = 0u;
+
+  assert(mqttsn_decode_packet(
+      reserved_bytes, sizeof(reserved_bytes), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_connack(&packet, &connack) == MQTTSN_MALFORMED_PACKET);
+
+  assert(mqttsn_decode_packet(
+      failed_session_bytes, sizeof(failed_session_bytes), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_connack(&packet, &connack) == MQTTSN_MALFORMED_PACKET);
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
   test_extended_frame();
   test_incomplete_and_reserved();
   test_multiple_packets();
+  test_utf8_validation();
+  test_basic_connect();
+  test_connack_decode();
+  test_connack_rejects_reserved_flags_and_failed_session_present();
   return 0;
 }
