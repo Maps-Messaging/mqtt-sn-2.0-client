@@ -78,6 +78,24 @@ mqttsn_status_t mqttsn_decode_packet(
     mqttsn_packet_view_t *packet,
     size_t *consumed);
 
+
+typedef struct {
+  const uint8_t *data;
+  size_t length;
+} mqttsn_buffer_t;
+
+/*
+ * Encode one MQTT-SN Control Packet from multiple body buffers. This is the
+ * canonical zero-allocation scatter/gather path used by typed packet codecs.
+ */
+mqttsn_status_t mqttsn_encode_packetv(
+    mqttsn_packet_type_t type,
+    const mqttsn_buffer_t *parts,
+    size_t part_count,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
 /*
  * Encode one control packet from a type and already-encoded packet body.
  * The shortest length representation is emitted.
