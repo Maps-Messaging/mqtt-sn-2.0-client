@@ -1,4 +1,5 @@
 #include "mqttsn/mqttsn.h"
+#include "mqttsn/packets.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -216,6 +217,167 @@ static void test_topic_validation(void) {
   assert(!mqttsn_topic_filter_is_valid(NULL, 0u));
 }
 
+
+static void test_publish_codec(void) {
+  const uint8_t topic_name[] = "a/b";
+  const uint8_t payload[] = {'x'};
+  const uint8_t expected[] = {
+      0x09, MQTTSN_PUBLISH, 0x03, 0x00, 0x03, 'a', '/', 'b', 'x'
+  };
+  mqttsn_publish_options_t options = {
+      .qos = MQTTSN_QOS_0,
+      .duplicate = 0u,
+      .retain = 0u,
+      .packet_identifier = 0u,
+      .topic = {
+          .type = MQTTSN_TOPIC_NAME,
+          .alias = 0u,
+          .name = topic_name,
+          .name_length = sizeof(topic_name) - 1u
+      },
+      .payload = payload,
+      .payload_length = sizeof(payload)
+  };
+  uint8_t output[64];
+  size_t written = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_publish_view_t publish;
+  size_t consumed = 0u;
+
+  assert(mqttsn_encode_publish(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(written == sizeof(expected));
+  assert(memcmp(output, expected, sizeof(expected)) == 0);
+
+  assert(mqttsn_decode_packet(
+      output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_publish(&packet, &publish) == MQTTSN_OK);
+  assert(publish.qos == MQTTSN_QOS_0);
+  assert(publish.packet_identifier == 0u);
+  assert(publish.topic.type == MQTTSN_TOPIC_NAME);
+  assert(publish.topic.name_length == 3u);
+  assert(memcmp(publish.topic.name, "a/b", 3u) == 0);
+  assert(publish.payload_length == 1u);
+  assert(publish.payload[0] == 'x');
+
+  options.duplicate = 1u;
+  assert(mqttsn_encode_publish(
+      &options, output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+}
+
+static void test_subscribe_and_suback(void) {
+  const uint8_t filter[] = "sensors/+";
+  mqttsn_subscribe_options_t options = {
+      .packet_identifier = 0x1234u,
+      .topic = {
+          .type = MQTTSN_TOPIC_NAME,
+          .alias = 0u,
+          .name = filter,
+          .name_length = sizeof(filter) - 1u
+      },
+      .retain_handling = 0u,
+      .retain_as_published = 0u,
+      .maximum_qos = MQTTSN_QOS_1,
+      .no_local = 0u
+  };
+  const uint8_t suback_bytes[] = {
+      0x08, MQTTSN_SUBACK, 0x04, 0x12, 0x34, 0x00, 0x2A, 0x00
+  };
+  uint8_t output[64];
+  size_t written = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_suback_view_t suback;
+  size_t consumed = 0u;
+
+  assert(mqttsn_encode_subscribe(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(output[1] == MQTTSN_SUBSCRIBE);
+  assert(output[2] == 0x23u);
+  assert(output[3] == 0x12u && output[4] == 0x34u);
+  assert(memcmp(output + 5u, filter, sizeof(filter) - 1u) == 0);
+
+  assert(mqttsn_decode_packet(
+      suback_bytes, sizeof(suback_bytes), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_suback(&packet, &suback) == MQTTSN_OK);
+  assert(suback.packet_identifier == 0x1234u);
+  assert(suback.has_topic_alias == 1u);
+  assert(suback.topic_alias == 42u);
+  assert(suback.has_reason_code == 1u);
+  assert(suback.reason_code == 0u);
+}
+
+static void test_ping_and_ack(void) {
+  const uint8_t expected_ping[] = {
+      0x04, MQTTSN_PINGREQ, 0x12, 0x34
+  };
+  const uint8_t pingresp_bytes[] = {
+      0x05, MQTTSN_PINGRESP, 0x12, 0x34, 0x07
+  };
+  uint8_t output[16];
+  size_t written = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_pingresp_view_t pingresp;
+  mqttsn_ack_view_t ack;
+  size_t consumed = 0u;
+
+  assert(mqttsn_encode_pingreq(
+      0x1234u, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(written == sizeof(expected_ping));
+  assert(memcmp(output, expected_ping, sizeof(expected_ping)) == 0);
+
+  assert(mqttsn_decode_packet(
+      pingresp_bytes, sizeof(pingresp_bytes), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_pingresp(&packet, &pingresp) == MQTTSN_OK);
+  assert(pingresp.packet_identifier == 0x1234u);
+  assert(pingresp.has_application_messages_remaining == 1u);
+  assert(pingresp.application_messages_remaining == 7u);
+
+  assert(mqttsn_encode_ack(
+      MQTTSN_PUBACK, 0x1234u, 1u, 0u,
+      output, sizeof(output), &written) == MQTTSN_OK);
+  assert(mqttsn_decode_packet(
+      output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_ack(&packet, &ack) == MQTTSN_OK);
+  assert(ack.packet_identifier == 0x1234u);
+  assert(ack.has_reason_code == 1u);
+  assert(ack.reason_code == 0u);
+}
+
+static void test_sleep_codec(void) {
+  const mqttsn_sleepreq_options_t options = {
+      .packet_identifier = 0x1234u,
+      .retain_topic_aliases = 1u,
+      .sleep_duration = 60u
+  };
+  const uint8_t expected[] = {
+      0x09, MQTTSN_SLEEPREQ, 0x01, 0x12, 0x34,
+      0x00, 0x00, 0x00, 0x3C
+  };
+  const uint8_t response[] = {
+      0x0A, MQTTSN_SLEEPRESP, 0x01, 0x12, 0x34,
+      0x00, 0x00, 0x00, 0x3C, 0x00
+  };
+  uint8_t output[16];
+  size_t written = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_sleepresp_view_t sleepresp;
+  size_t consumed = 0u;
+
+  assert(mqttsn_encode_sleepreq(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(written == sizeof(expected));
+  assert(memcmp(output, expected, sizeof(expected)) == 0);
+
+  assert(mqttsn_decode_packet(
+      response, sizeof(response), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_sleepresp(&packet, &sleepresp) == MQTTSN_OK);
+  assert(sleepresp.packet_identifier == 0x1234u);
+  assert(sleepresp.has_sleep_duration == 1u);
+  assert(sleepresp.sleep_duration == 60u);
+  assert(sleepresp.has_reason_code == 1u);
+  assert(sleepresp.reason_code == 0u);
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -227,5 +389,9 @@ int main(void) {
   test_connack_decode();
   test_connack_rejects_reserved_flags_and_failed_session_present();
   test_topic_validation();
+  test_publish_codec();
+  test_subscribe_and_suback();
+  test_ping_and_ack();
+  test_sleep_codec();
   return 0;
 }
