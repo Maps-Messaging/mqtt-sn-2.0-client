@@ -79,17 +79,21 @@ mqttsn_status_t mqttsn_decode_packet(
   return MQTTSN_OK;
 }
 
-mqttsn_status_t mqttsn_encode_packet(
+mqttsn_status_t mqttsn_encode_packetv(
     mqttsn_packet_type_t type,
-    const uint8_t *body,
-    size_t body_length,
+    const mqttsn_buffer_t *parts,
+    size_t part_count,
     uint8_t *output,
     size_t output_capacity,
     size_t *written) {
-  size_t packet_length;
+  size_t body_length = 0u;
   size_t header_length;
+  size_t packet_length;
+  size_t offset;
+  size_t i;
 
-  if (output == NULL || written == NULL || (body == NULL && body_length != 0u)) {
+  if (output == NULL || written == NULL ||
+      (parts == NULL && part_count != 0u)) {
     return MQTTSN_INVALID_ARGUMENT;
   }
   *written = 0u;
@@ -98,16 +102,21 @@ mqttsn_status_t mqttsn_encode_packet(
     return MQTTSN_RESERVED_TYPE;
   }
 
-  if (body_length <= 253u) {
-    header_length = 2u;
-    packet_length = body_length + header_length;
-  } else {
-    header_length = 4u;
-    if (body_length > (MQTTSN_MAX_PACKET_SIZE - header_length)) {
+  for (i = 0u; i < part_count; i++) {
+    if (parts[i].data == NULL && parts[i].length != 0u) {
+      return MQTTSN_INVALID_ARGUMENT;
+    }
+    if (parts[i].length > MQTTSN_MAX_PACKET_SIZE - body_length) {
       return MQTTSN_MALFORMED_PACKET;
     }
-    packet_length = body_length + header_length;
+    body_length += parts[i].length;
   }
+
+  header_length = body_length <= 253u ? 2u : 4u;
+  if (body_length > MQTTSN_MAX_PACKET_SIZE - header_length) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+  packet_length = body_length + header_length;
 
   if (output_capacity < packet_length) {
     return MQTTSN_BUFFER_TOO_SMALL;
@@ -123,13 +132,41 @@ mqttsn_status_t mqttsn_encode_packet(
     output[3] = (uint8_t)type;
   }
 
-  if (body_length != 0u) {
-    memcpy(output + header_length, body, body_length);
+  offset = header_length;
+  for (i = 0u; i < part_count; i++) {
+    if (parts[i].length != 0u) {
+      memcpy(output + offset, parts[i].data, parts[i].length);
+      offset += parts[i].length;
+    }
   }
+
   *written = packet_length;
   return MQTTSN_OK;
 }
 
+mqttsn_status_t mqttsn_encode_packet(
+    mqttsn_packet_type_t type,
+    const uint8_t *body,
+    size_t body_length,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  mqttsn_buffer_t part;
+
+  if (body == NULL && body_length != 0u) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+
+  part.data = body;
+  part.length = body_length;
+  return mqttsn_encode_packetv(
+      type,
+      body_length == 0u ? NULL : &part,
+      body_length == 0u ? 0u : 1u,
+      output,
+      output_capacity,
+      written);
+}
 
 static uint16_t read_u16(const uint8_t *data) {
   return (uint16_t)(((uint16_t)data[0] << 8u) | (uint16_t)data[1]);
