@@ -23,3 +23,9 @@ add_executable(mqttsn2_c_test
 )
 target_link_libraries(mqttsn2_c_test PRIVATE mqttsn2)
 add_test(NAME mqttsn2_c_test COMMAND mqttsn2_c_test)
+
+add_executable(mqttsn2_client_test
+    test/test_client.c
+)
+target_link_libraries(mqttsn2_client_test PRIVATE mqttsn2)
+add_test(NAME mqttsn2_client_test COMMAND mqttsn2_client_test)
