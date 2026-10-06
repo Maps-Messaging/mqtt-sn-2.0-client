@@ -115,4 +115,88 @@ class MqttSnCodecTest {
         () -> new ConnectOptions(true, false, false, 1, 60, 0, "a\0b"));
   }
 
+
+  @Test
+  void publishesTopicNameAtQosZero() {
+    PublishOptions options = new PublishOptions(
+        QoS.AT_MOST_ONCE,
+        false,
+        false,
+        0,
+        TopicRef.name("a/b"),
+        new byte[] {'x'});
+
+    byte[] encoded = MqttSnCodec.encodePublish(options);
+
+    assertArrayEquals(
+        new byte[] {0x09, 0x03, 0x03, 0x00, 0x03, 'a', '/', 'b', 'x'},
+        encoded);
+
+    PublishPacket decoded = MqttSnCodec.decodePublish(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+    assertEquals(QoS.AT_MOST_ONCE, decoded.qos());
+    assertEquals("a/b", decoded.topic().name());
+    assertArrayEquals(new byte[] {'x'}, decoded.payload());
+  }
+
+  @Test
+  void subscribesAndDecodesSubAck() {
+    SubscribeOptions options = new SubscribeOptions(
+        0x1234,
+        TopicRef.filter("sensors/+"),
+        0,
+        false,
+        QoS.AT_LEAST_ONCE,
+        false);
+
+    byte[] encoded = MqttSnCodec.encodeSubscribe(options);
+
+    assertEquals(0x23, Byte.toUnsignedInt(encoded[2]));
+    assertEquals(0x12, Byte.toUnsignedInt(encoded[3]));
+    assertEquals(0x34, Byte.toUnsignedInt(encoded[4]));
+
+    SubAck subAck = MqttSnCodec.decodeSubAck(
+        MqttSnCodec.decode(ByteBuffer.wrap(
+            new byte[] {0x08, 0x09, 0x04, 0x12, 0x34, 0x00, 0x2A, 0x00})));
+    assertEquals(0x1234, subAck.packetIdentifier());
+    assertEquals(42, subAck.topicAlias());
+    assertEquals(0, subAck.reasonCode());
+  }
+
+  @Test
+  void validatesTopicWildcardRules() {
+    assertThrows(MqttSnException.class, () -> TopicRef.name("sensors/+"));
+    assertThrows(MqttSnException.class, () -> TopicRef.filter("sensors/temp+"));
+    assertThrows(MqttSnException.class, () -> TopicRef.filter("sensors/#/x"));
+  }
+
+  @Test
+  void handlesPingAndSleepPackets() {
+    assertArrayEquals(
+        new byte[] {0x04, 0x0C, 0x12, 0x34},
+        MqttSnCodec.encodePingReq(0x1234));
+
+    PingResp pingResp = MqttSnCodec.decodePingResp(
+        MqttSnCodec.decode(ByteBuffer.wrap(
+            new byte[] {0x05, 0x0D, 0x12, 0x34, 0x07})));
+    assertEquals(7, pingResp.applicationMessagesRemaining());
+
+    byte[] sleepReq = MqttSnCodec.encodeSleepReq(
+        new SleepRequest(0x1234, true, 60));
+    assertArrayEquals(
+        new byte[] {
+            0x09, 0x13, 0x01, 0x12, 0x34, 0x00, 0x00, 0x00, 0x3C
+        },
+        sleepReq);
+
+    SleepResponse sleepResp = MqttSnCodec.decodeSleepResp(
+        MqttSnCodec.decode(ByteBuffer.wrap(
+            new byte[] {
+                0x0A, 0x14, 0x01, 0x12, 0x34,
+                0x00, 0x00, 0x00, 0x3C, 0x00
+            })));
+    assertEquals(60L, sleepResp.sleepDurationSeconds());
+    assertEquals(0, sleepResp.reasonCode());
+  }
+
 }
