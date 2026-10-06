@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 extern "C" {
@@ -60,8 +61,93 @@ struct PacketView {
   std::size_t headerLength;
 };
 
+
+struct ConnectOptions {
+  bool cleanStart{true};
+  bool allowNetworkAddressChanges{false};
+  bool allowServerSuggestedValues{false};
+  std::uint16_t packetIdentifier{};
+  std::uint16_t keepAliveSeconds{};
+  std::uint16_t maximumPacketSize{};
+  std::string_view clientIdentifier{};
+};
+
+struct ConnAckView {
+  bool sessionPresent;
+  std::uint16_t packetIdentifier;
+  std::uint8_t reasonCode;
+  bool hasSessionExpiryInterval;
+  std::uint32_t sessionExpiryInterval;
+  bool hasServerKeepAlive;
+  std::uint16_t serverKeepAlive;
+  bool hasAuthentication;
+  std::string_view authenticationMethod;
+  std::span<const std::uint8_t> authenticationData;
+  std::string_view assignedClientIdentifier;
+};
+
 class Codec {
  public:
+
+  static std::vector<std::uint8_t> encodeConnect(const ConnectOptions& options) {
+    const mqttsn_connect_options_t native{
+        static_cast<std::uint8_t>(options.cleanStart),
+        static_cast<std::uint8_t>(options.allowNetworkAddressChanges),
+        static_cast<std::uint8_t>(options.allowServerSuggestedValues),
+        options.packetIdentifier,
+        options.keepAliveSeconds,
+        options.maximumPacketSize,
+        reinterpret_cast<const std::uint8_t*>(options.clientIdentifier.data()),
+        options.clientIdentifier.size()};
+
+    const std::size_t bodyLength = 8u + options.clientIdentifier.size();
+    const std::size_t capacity = bodyLength <= 253u
+        ? bodyLength + 2u
+        : bodyLength + 4u;
+    std::vector<std::uint8_t> output(capacity);
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_connect(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static ConnAckView decodeConnAck(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_connack_view_t native{};
+    const auto status = mqttsn_decode_connack(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+
+    return ConnAckView{
+        native.session_present != 0,
+        native.packet_identifier,
+        native.reason_code,
+        native.has_session_expiry_interval != 0,
+        native.session_expiry_interval,
+        native.has_server_keep_alive != 0,
+        native.server_keep_alive,
+        native.has_authentication != 0,
+        std::string_view(
+            reinterpret_cast<const char*>(native.authentication_method),
+            native.authentication_method_length),
+        std::span<const std::uint8_t>(
+            native.authentication_data,
+            native.authentication_data_length),
+        std::string_view(
+            reinterpret_cast<const char*>(native.assigned_client_identifier),
+            native.assigned_client_identifier_length)};
+  }
+
   static PacketView decode(std::span<const std::uint8_t> input) {
     mqttsn_packet_view_t native{};
     std::size_t consumed = 0;
