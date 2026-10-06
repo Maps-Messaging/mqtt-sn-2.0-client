@@ -40,6 +40,61 @@ class PacketType(IntEnum):
     PROTECTION_ENCAPSULATION = 0xFF
 
 
+
+
+@dataclass(frozen=True)
+class ConnectOptions:
+    clean_start: bool
+    allow_network_address_changes: bool
+    allow_server_suggested_values: bool
+    packet_identifier: int
+    keep_alive_seconds: int
+    maximum_packet_size: int = 0
+    client_identifier: str = ""
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.packet_identifier <= 0xFFFF:
+            raise ValueError("packet_identifier must be 1..65535")
+        if not 1 <= self.keep_alive_seconds <= 0xFFFF:
+            raise ValueError("keep_alive_seconds must be 1..65535")
+        if not (
+            self.maximum_packet_size == 0
+            or 10 <= self.maximum_packet_size <= 0xFFFF
+        ):
+            raise ValueError("maximum_packet_size must be 0 or 10..65535")
+        _encode_utf8(self.client_identifier)
+
+
+@dataclass(frozen=True)
+class ConnAck:
+    session_present: bool
+    packet_identifier: int
+    reason_code: int
+    session_expiry_interval: int | None
+    server_keep_alive: int | None
+    authentication_method: str | None
+    authentication_data: bytes | None
+    assigned_client_identifier: str
+
+
+def _encode_utf8(value: str) -> bytes:
+    if "\x00" in value:
+        raise MqttSnError("MALFORMED_PACKET", "MQTT-SN UTF-8 must not contain U+0000")
+    try:
+        return value.encode("utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid MQTT-SN UTF-8 string") from exc
+
+
+def _decode_utf8(value: memoryview) -> str:
+    try:
+        decoded = bytes(value).decode("utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid MQTT-SN UTF-8 bytes") from exc
+    _encode_utf8(decoded)
+    return decoded
+
+
 @dataclass(frozen=True)
 class DecodedPacket:
     type: PacketType
@@ -119,3 +174,110 @@ def encode_packet(
 
     output[header_length:] = packet_body
     return bytes(output)
+
+
+def encode_connect(options: ConnectOptions) -> bytes:
+    client_identifier = _encode_utf8(options.client_identifier)
+    flags = 0
+    if options.clean_start:
+        flags |= 0x01
+    if options.allow_network_address_changes:
+        flags |= 0x20
+    if options.allow_server_suggested_values:
+        flags |= 0x40
+
+    body = bytearray(8 + len(client_identifier))
+    body[0] = flags
+    body[1:3] = options.packet_identifier.to_bytes(2, "big")
+    body[3] = 0x02
+    body[4:6] = options.keep_alive_seconds.to_bytes(2, "big")
+    body[6:8] = options.maximum_packet_size.to_bytes(2, "big")
+    body[8:] = client_identifier
+    return encode_packet(PacketType.CONNECT, body)
+
+
+def decode_connack(packet: DecodedPacket) -> ConnAck:
+    if packet.type is not PacketType.CONNACK:
+        raise MqttSnError("MALFORMED_PACKET", "Expected CONNACK")
+
+    body = packet.body
+    if len(body) < 4:
+        raise MqttSnError("MALFORMED_PACKET", "CONNACK is too short")
+
+    flags = body[0]
+    if flags & 0xF0:
+        raise MqttSnError(
+            "MALFORMED_PACKET", "CONNACK reserved flags are non-zero"
+        )
+
+    session_present = bool(flags & 0x01)
+    packet_identifier = int.from_bytes(body[1:3], "big")
+    reason_code = body[3]
+    if session_present and reason_code != 0:
+        raise MqttSnError(
+            "MALFORMED_PACKET",
+            "CONNACK Session Present must be zero on failure",
+        )
+
+    offset = 4
+    session_expiry: int | None = None
+    if flags & 0x02:
+        if len(body) - offset < 4:
+            raise MqttSnError(
+                "MALFORMED_PACKET", "CONNACK Session Expiry Interval is truncated"
+            )
+        session_expiry = int.from_bytes(body[offset : offset + 4], "big")
+        offset += 4
+
+    server_keep_alive: int | None = None
+    if flags & 0x04:
+        if len(body) - offset < 2:
+            raise MqttSnError(
+                "MALFORMED_PACKET", "CONNACK Server Keep Alive is truncated"
+            )
+        server_keep_alive = int.from_bytes(body[offset : offset + 2], "big")
+        if server_keep_alive == 0:
+            raise MqttSnError(
+                "MALFORMED_PACKET",
+                "CONNACK Server Keep Alive must be greater than zero",
+            )
+        offset += 2
+
+    authentication_method: str | None = None
+    authentication_data: bytes | None = None
+    if flags & 0x08:
+        if len(body) - offset < 1:
+            raise MqttSnError(
+                "MALFORMED_PACKET",
+                "CONNACK Authentication Method Length is truncated",
+            )
+        method_length = body[offset]
+        offset += 1
+        if len(body) - offset < method_length + 2:
+            raise MqttSnError(
+                "MALFORMED_PACKET", "CONNACK Authentication Method is truncated"
+            )
+        authentication_method = _decode_utf8(body[offset : offset + method_length])
+        offset += method_length
+
+        data_length = int.from_bytes(body[offset : offset + 2], "big")
+        offset += 2
+        if len(body) - offset < data_length:
+            raise MqttSnError(
+                "MALFORMED_PACKET", "CONNACK Authentication Data is truncated"
+            )
+        authentication_data = bytes(body[offset : offset + data_length])
+        offset += data_length
+
+    assigned_client_identifier = _decode_utf8(body[offset:]) if offset < len(body) else ""
+
+    return ConnAck(
+        session_present,
+        packet_identifier,
+        reason_code,
+        session_expiry,
+        server_keep_alive,
+        authentication_method,
+        authentication_data,
+        assigned_client_identifier,
+    )
