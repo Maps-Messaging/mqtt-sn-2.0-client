@@ -353,6 +353,9 @@ mqttsn_status_t mqttsn_client_track_outbound(
   client->expected_response_type = expected_response;
   client->outbound_packet_identifier = packet_identifier;
   client->qos2_pubrel_pending = 0u;
+  if (packet.type == MQTTSN_AUTH) {
+    client->connect_packet_identifier = packet_identifier;
+  }
 
   if (packet.type == MQTTSN_PINGREQ &&
       client->state == MQTTSN_CLIENT_ASLEEP) {
