@@ -144,6 +144,13 @@ typedef struct {
  */
 int mqttsn_utf8_is_valid(const uint8_t *data, size_t length);
 
+
+/*
+ * Topic validation from MQTT-SN 2.0 CSD01 section 4.7.
+ */
+int mqttsn_topic_name_is_valid(const uint8_t *data, size_t length);
+int mqttsn_topic_filter_is_valid(const uint8_t *data, size_t length);
+
 /*
  * Encode the mandatory CONNECT fields plus an optional Client Identifier.
  * Will, Authentication, Session Expiry and Maximum Awake Messages are
