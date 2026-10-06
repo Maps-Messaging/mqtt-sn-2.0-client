@@ -8,7 +8,7 @@
  */
 
 extern "C" {
-#include "mqttsn/mqttsn.h"
+#include <mqttsn.h>
 }
 
 static uint8_t outbound[32];
