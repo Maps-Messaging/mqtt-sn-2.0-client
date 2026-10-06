@@ -129,6 +129,15 @@ mqttsn_status_t mqttsn_encode_unsubscribe(
     size_t output_capacity,
     size_t *written);
 
+mqttsn_status_t mqttsn_encode_ack(
+    mqttsn_packet_type_t type,
+    uint16_t packet_identifier,
+    uint8_t has_reason_code,
+    uint8_t reason_code,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
 mqttsn_status_t mqttsn_decode_ack(
     const mqttsn_packet_view_t *packet,
     mqttsn_ack_view_t *ack);
