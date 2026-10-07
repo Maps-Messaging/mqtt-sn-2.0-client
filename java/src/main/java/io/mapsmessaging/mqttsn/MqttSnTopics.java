@@ -47,15 +47,26 @@ final class MqttSnTopics {
     for (int i = 0; i < value.length(); i++) {
       char ch = value.charAt(i);
       if (ch == '#') {
-        if (i != value.length() - 1 || (i != 0 && value.charAt(i - 1) != '/')) {
-          throw malformed("Multi-level wildcard must occupy the final level");
-        }
+        validateMultiLevelWildcard(value, i);
       } else if (ch == '+') {
-        if ((i != 0 && value.charAt(i - 1) != '/')
-            || (i + 1 != value.length() && value.charAt(i + 1) != '/')) {
-          throw malformed("Single-level wildcard must occupy an entire level");
-        }
+        validateSingleLevelWildcard(value, i);
       }
+    }
+  }
+
+  private static void validateMultiLevelWildcard(String value, int index) {
+    if (index != value.length() - 1
+        || (index != 0 && value.charAt(index - 1) != '/')) {
+      throw malformed("Multi-level wildcard must occupy the final level");
+    }
+  }
+
+  private static void validateSingleLevelWildcard(String value, int index) {
+    boolean hasInvalidPrefix = index != 0 && value.charAt(index - 1) != '/';
+    boolean hasInvalidSuffix =
+        index + 1 != value.length() && value.charAt(index + 1) != '/';
+    if (hasInvalidPrefix || hasInvalidSuffix) {
+      throw malformed("Single-level wildcard must occupy an entire level");
     }
   }
 
