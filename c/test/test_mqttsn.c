@@ -411,7 +411,9 @@ static void test_length_boundaries_and_maximum_packet(void) {
   assert(extended_packet[0] == 0x01u);
   assert(extended_packet[1] == 0x01u);
   assert(extended_packet[2] == 0x02u);
-  assert(view.header_length == 2u || view.header_length == 4u);
+  assert(mqttsn_decode_packet(
+      extended_packet, written, &view, &consumed) == MQTTSN_OK);
+  assert(view.header_length == 4u);
 
   maximum_packet = (uint8_t *)malloc(MQTTSN_MAX_PACKET_SIZE);
   assert(maximum_packet != NULL);
