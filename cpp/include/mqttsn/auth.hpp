@@ -43,6 +43,13 @@ class AuthenticationMechanism {
   virtual void reset() {}
 };
 
+struct AuthenticationResponse {
+  std::uint16_t packetIdentifier{};
+  std::uint8_t reasonCode{};
+  std::string authenticationMethod;
+  std::vector<std::uint8_t> authenticationData;
+};
+
 class AuthenticationExchange {
  public:
   explicit AuthenticationExchange(AuthenticationMechanism& mechanism)
@@ -67,7 +74,7 @@ class AuthenticationExchange {
     return output;
   }
 
-  AuthPacket continueAuthentication(
+  AuthenticationResponse continueAuthentication(
       const AuthPacket& serverAuth,
       std::uint16_t responsePacketIdentifier) {
     const mqttsn_auth_t nativeServer{
@@ -95,10 +102,10 @@ class AuthenticationExchange {
     }
 
     response.resize(written);
-    return AuthPacket{
+    return AuthenticationResponse{
         client.packet_identifier,
         client.reason_code,
-        std::string_view(
+        std::string(
             reinterpret_cast<const char*>(client.authentication_method),
             client.authentication_method_length),
         std::move(response)};
@@ -131,7 +138,7 @@ class AuthenticationExchange {
     }
   }
 
-  AuthPacket beginReauthentication(std::uint16_t packetIdentifier) {
+  AuthenticationResponse beginReauthentication(std::uint16_t packetIdentifier) {
     std::vector<std::uint8_t> response(0xFFFFu);
     std::size_t written = 0;
     mqttsn_auth_t client{};
@@ -148,10 +155,10 @@ class AuthenticationExchange {
     }
 
     response.resize(written);
-    return AuthPacket{
+    return AuthenticationResponse{
         client.packet_identifier,
         client.reason_code,
-        std::string_view(
+        std::string(
             reinterpret_cast<const char*>(client.authentication_method),
             client.authentication_method_length),
         std::move(response)};
