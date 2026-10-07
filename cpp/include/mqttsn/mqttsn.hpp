@@ -90,6 +90,24 @@ struct ConnAckView {
 
 
 
+
+struct AuthPacket {
+  std::uint16_t packetIdentifier{};
+  std::uint8_t reasonCode{};
+  std::string_view authenticationMethod{};
+  std::span<const std::uint8_t> authenticationData{};
+};
+
+struct DisconnectPacket {
+  bool hasPacketIdentifier{false};
+  std::uint16_t packetIdentifier{};
+  bool hasReasonCode{false};
+  std::uint8_t reasonCode{};
+  bool hasSessionExpiryInterval{false};
+  std::uint32_t sessionExpiryInterval{};
+  std::string_view reasonString{};
+};
+
 struct ConnectionEncapsulation {
   std::string_view clientIdentifier{};
   std::span<const std::uint8_t> mqttSnPacket{};
@@ -185,6 +203,95 @@ class Codec {
  public:
 
 
+
+
+  static std::vector<std::uint8_t> encodeAuth(const AuthPacket& packet) {
+    const mqttsn_auth_t native{
+        packet.packetIdentifier,
+        packet.reasonCode,
+        reinterpret_cast<const std::uint8_t*>(packet.authenticationMethod.data()),
+        packet.authenticationMethod.size(),
+        packet.authenticationData.data(),
+        packet.authenticationData.size()};
+    std::vector<std::uint8_t> output(
+        8u + packet.authenticationMethod.size() + packet.authenticationData.size());
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_auth(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static AuthPacket decodeAuth(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_auth_t native{};
+    const auto status = mqttsn_decode_auth(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return AuthPacket{
+        native.packet_identifier,
+        native.reason_code,
+        std::string_view(
+            reinterpret_cast<const char*>(native.authentication_method),
+            native.authentication_method_length),
+        std::span<const std::uint8_t>(
+            native.authentication_data, native.authentication_data_length)};
+  }
+
+  static std::vector<std::uint8_t> encodeDisconnect(
+      const DisconnectPacket& packet) {
+    const mqttsn_disconnect_options_t native{
+        static_cast<std::uint8_t>(packet.hasPacketIdentifier),
+        packet.packetIdentifier,
+        static_cast<std::uint8_t>(packet.hasReasonCode),
+        packet.reasonCode,
+        static_cast<std::uint8_t>(packet.hasSessionExpiryInterval),
+        packet.sessionExpiryInterval,
+        reinterpret_cast<const std::uint8_t*>(packet.reasonString.data()),
+        packet.reasonString.size()};
+    std::vector<std::uint8_t> output(12u + packet.reasonString.size());
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_disconnect(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static DisconnectPacket decodeDisconnect(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_disconnect_view_t native{};
+    const auto status = mqttsn_decode_disconnect(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return DisconnectPacket{
+        native.has_packet_identifier != 0,
+        native.packet_identifier,
+        native.has_reason_code != 0,
+        native.reason_code,
+        native.has_session_expiry_interval != 0,
+        native.session_expiry_interval,
+        std::string_view(
+            reinterpret_cast<const char*>(native.reason_string),
+            native.reason_string_length)};
+  }
 
   static std::vector<std::uint8_t> encodeConnectionEncapsulation(
       const ConnectionEncapsulation& encapsulation) {
