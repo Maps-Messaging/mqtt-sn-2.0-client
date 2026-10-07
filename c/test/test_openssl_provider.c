@@ -192,8 +192,68 @@ static void test_truncation_and_tamper(void) {
       plain, sizeof(plain), &plain_written) == MQTTSN_MALFORMED_PACKET);
 }
 
+
+static void test_envelope_round_trips(void) {
+  const uint8_t sender_id[8] = {1,2,3,4,5,6,7,8};
+  const uint8_t random[4] = {0x11,0x12,0x13,0x14};
+  const uint8_t inner[] = {0x04, MQTTSN_PINGREQ, 0x12, 0x34};
+  size_t i;
+
+  for (i = 0u; i < sizeof(VECTORS) / sizeof(VECTORS[0]); i++) {
+    uint8_t key[64];
+    size_t key_length = decode_hex(VECTORS[i].key_hex, key, sizeof(key));
+    key_data_t key_data = {key, key_length};
+    mqttsn_openssl_provider_t openssl_provider;
+    const mqttsn_protection_provider_t *provider;
+    mqttsn_protection_envelope_t envelope = {
+        .scheme = VECTORS[i].scheme,
+        .tag_length_code = 0x01u,
+        .sender_identifier = sender_id,
+        .sender_identifier_length = sizeof(sender_id),
+        .random = random,
+        .random_length = sizeof(random),
+        .cryptographic_material = NULL,
+        .cryptographic_material_length = 0u,
+        .monotonic_counter = NULL,
+        .monotonic_counter_length = 0u,
+        .mqttsn_packet = inner,
+        .mqttsn_packet_length = sizeof(inner)
+    };
+    uint8_t encoded[256];
+    size_t encoded_length = 0u;
+    uint8_t decoded_inner[64];
+    size_t decoded_inner_length = 0u;
+    mqttsn_protection_envelope_t decoded;
+
+    assert(mqttsn_openssl_provider_init(
+        &openssl_provider, resolve_key, &key_data) == MQTTSN_OK);
+    provider = mqttsn_openssl_provider(&openssl_provider);
+
+    assert(mqttsn_encode_protection(
+        &envelope,
+        provider,
+        encoded,
+        sizeof(encoded),
+        &encoded_length) == MQTTSN_OK);
+
+    assert(mqttsn_decode_protection(
+        encoded,
+        encoded_length,
+        provider,
+        decoded_inner,
+        sizeof(decoded_inner),
+        &decoded_inner_length,
+        &decoded) == MQTTSN_OK);
+
+    assert(decoded.scheme == VECTORS[i].scheme);
+    assert(decoded_inner_length == sizeof(inner));
+    assert(memcmp(decoded_inner, inner, sizeof(inner)) == 0);
+  }
+}
+
 int main(void) {
   test_vectors();
   test_truncation_and_tamper();
+  test_envelope_round_trips();
   return 0;
 }
