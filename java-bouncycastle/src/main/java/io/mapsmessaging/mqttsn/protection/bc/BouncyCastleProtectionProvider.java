@@ -101,7 +101,7 @@ public final class BouncyCastleProtectionProvider implements ProtectionProvider 
             Arrays.copyOf(fullTag, tagLength));
       }
 
-      byte[] combined = aead(true, context, key, mqttSnPacket, null);
+      byte[] combined = aead(true, context, key, mqttSnPacket);
       int tagLength = authenticationTagLength(context.scheme(), context.tagLengthCode());
       int ciphertextLength = combined.length - tagLength;
       return new ProtectedContent(
@@ -133,7 +133,7 @@ public final class BouncyCastleProtectionProvider implements ProtectionProvider 
       System.arraycopy(protectedPacket, 0, combined, 0, protectedPacket.length);
       System.arraycopy(
           authenticationTag, 0, combined, protectedPacket.length, authenticationTag.length);
-      return aead(false, context, key, combined, authenticationTag);
+      return aead(false, context, key, combined);
     } catch (GeneralSecurityException ex) {
       return null;
     }
@@ -160,8 +160,7 @@ public final class BouncyCastleProtectionProvider implements ProtectionProvider 
       boolean encrypt,
       ProtectionContext context,
       byte[] key,
-      byte[] input,
-      byte[] authenticationTag)
+      byte[] input)
       throws GeneralSecurityException {
     String transformation = switch (context.scheme()) {
       case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45 -> "AES/CCM/NoPadding";
