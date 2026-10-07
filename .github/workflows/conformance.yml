@@ -29,9 +29,15 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - name: Test Java
-        working-directory: java
-        run: mvn --batch-mode test
+      - name: Build and test Java artifact
+        run: mvn --batch-mode clean verify
+      - name: Upload Java artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mqtt-sn-2-java-client
+          path: |
+            java/target/mqtt-sn-2-client-*.jar
+            !java/target/original-*.jar
 
   python:
     runs-on: ubuntu-latest
