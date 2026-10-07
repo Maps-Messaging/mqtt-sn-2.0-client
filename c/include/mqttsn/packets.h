@@ -70,6 +70,41 @@ typedef struct {
 } mqttsn_unsubscribe_options_t;
 
 
+
+typedef struct {
+  const uint8_t *client_identifier;
+  size_t client_identifier_length;
+  const uint8_t *mqttsn_packet;
+  size_t mqttsn_packet_length;
+} mqttsn_connection_encapsulation_t;
+
+typedef struct {
+  const uint8_t *client_addressing_information;
+  size_t client_addressing_information_length;
+  const uint8_t *mqttsn_packet;
+  size_t mqttsn_packet_length;
+} mqttsn_forwarder_encapsulation_t;
+
+mqttsn_status_t mqttsn_encode_connection_encapsulation(
+    const mqttsn_connection_encapsulation_t *encapsulation,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_connection_encapsulation(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_connection_encapsulation_t *encapsulation);
+
+mqttsn_status_t mqttsn_encode_forwarder_encapsulation(
+    const mqttsn_forwarder_encapsulation_t *encapsulation,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_forwarder_encapsulation(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_forwarder_encapsulation_t *encapsulation);
+
 typedef struct {
   uint8_t retain;
   mqttsn_topic_ref_t topic;
