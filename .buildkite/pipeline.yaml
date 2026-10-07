@@ -1,0 +1,22 @@
+steps:
+  - label: ":java: Build MQTT-SN 2.0 Java client"
+    key: "java-build"
+    checkout:
+      ssh_secret: "GITHUB_SSH_KEY"
+    commands:
+      - "mvn --batch-mode clean verify"
+    artifact_paths:
+      - "java/target/mqtt-sn-2-client-*.jar"
+    agents:
+      queue: "java_build_queue_aws"
+
+  - label: ":nexus: Publish MQTT-SN 2.0 snapshot"
+    key: "publish-snapshot"
+    depends_on: "java-build"
+    if: build.branch == "main" && build.tag == null
+    checkout:
+      ssh_secret: "GITHUB_SSH_KEY"
+    commands:
+      - "mvn --batch-mode clean deploy -DskipTests"
+    agents:
+      queue: "java_build_queue_aws"
