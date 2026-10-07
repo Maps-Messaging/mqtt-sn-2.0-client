@@ -269,6 +269,45 @@ static void test_encapsulation_wrappers() {
   }
 }
 
+
+static void test_session_wrapper() {
+  mqttsn::Session session;
+  const mqttsn::ConnectOptions connect{
+      true, false, false, 0x1001u, 60u, 0u, "state-test"};
+
+  const auto connectBytes = mqttsn::Codec::encodeConnect(connect);
+  session.trackOutbound(connectBytes);
+  assert(session.state() == mqttsn::ClientState::Connecting);
+
+  const std::array<std::uint8_t, 6> connack{
+      0x06u, 0x02u, 0x00u, 0x10u, 0x01u, 0x00u};
+  session.trackInbound(connack);
+  assert(session.state() == mqttsn::ClientState::Active);
+
+  const std::array<std::uint8_t, 4> ping{
+      0x04u, 0x0Cu, 0x20u, 0x01u};
+  session.trackOutbound(ping);
+  assert(session.hasOutboundRequest());
+  assert(session.outboundPacketIdentifier() == 0x2001u);
+
+  try {
+    const std::array<std::uint8_t, 4> secondPing{
+        0x04u, 0x0Cu, 0x20u, 0x02u};
+    session.trackOutbound(secondPing);
+    assert(false);
+  } catch (const mqttsn::Error& error) {
+    assert(error.status() == MQTTSN_FLOW_CONTROL);
+  }
+
+  session.retryExhausted();
+  assert(session.state() == mqttsn::ClientState::Disconnected);
+  assert(!session.hasOutboundRequest());
+
+  mqttsn::Session wrapping(0xFFFFu);
+  assert(wrapping.nextPacketIdentifier() == 0xFFFFu);
+  assert(wrapping.nextPacketIdentifier() == 1u);
+}
+
 int main() {
   test_short_and_extended_framing();
   test_connect_and_connack();
@@ -279,5 +318,6 @@ int main() {
   test_pubwos_and_gateway_discovery_wrappers();
   test_timer_wrappers();
   test_encapsulation_wrappers();
+  test_session_wrapper();
   return 0;
 }
