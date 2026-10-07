@@ -7,6 +7,8 @@ public interface ProtectionProvider {
 
   int authenticationTagLength(int scheme, int tagLengthCode);
 
+  int protectedPacketLength(int scheme, int mqttSnPacketLength);
+
   ProtectedContent protect(
       ProtectionContext context,
       byte[] mqttSnPacket);
