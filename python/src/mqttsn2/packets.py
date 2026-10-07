@@ -518,3 +518,49 @@ def decode_disconnect(packet: DecodedPacket) -> DisconnectPacket:
     return DisconnectPacket(
         packet_identifier, reason_code, session_expiry_interval, reason_string
     )
+
+
+@dataclass(frozen=True)
+class AuthPacket:
+    packet_identifier: int
+    reason_code: int
+    authentication_method: str
+    authentication_data: bytes = b""
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.packet_identifier <= 0xFFFF:
+            raise ValueError("packet_identifier must be 1..65535")
+        if not 0 <= self.reason_code <= 0xFF:
+            raise ValueError("reason_code must be 0..255")
+        method = self.authentication_method.encode("utf-8")
+        _decode_utf8(method)
+        if len(method) > 0xFF:
+            raise ValueError("authentication_method must be at most 255 UTF-8 bytes")
+
+
+def encode_auth(auth: AuthPacket) -> bytes:
+    method = auth.authentication_method.encode("utf-8")
+    body = bytearray(auth.packet_identifier.to_bytes(2, "big"))
+    body.append(auth.reason_code)
+    body.append(len(method))
+    body += method
+    body += auth.authentication_data
+    return encode_packet(PacketType.AUTH, body)
+
+
+def decode_auth(packet: DecodedPacket) -> AuthPacket:
+    if packet.type is not PacketType.AUTH or len(packet.body) < 4:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid AUTH packet")
+
+    packet_identifier = int.from_bytes(packet.body[:2], "big")
+    if packet_identifier == 0:
+        raise MqttSnError("MALFORMED_PACKET", "AUTH Packet Identifier must be non-zero")
+
+    reason_code = packet.body[2]
+    method_length = packet.body[3]
+    if len(packet.body) < 4 + method_length:
+        raise MqttSnError("MALFORMED_PACKET", "AUTH Authentication Method is truncated")
+
+    method = _decode_utf8(packet.body[4 : 4 + method_length])
+    data = bytes(packet.body[4 + method_length :])
+    return AuthPacket(packet_identifier, reason_code, method, data)
