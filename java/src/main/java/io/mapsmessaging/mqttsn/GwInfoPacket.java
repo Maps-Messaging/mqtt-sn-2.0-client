@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record GwInfoPacket(int gatewayIdentifier, byte[] gatewayAddress) {
   public GwInfoPacket {
     if (gatewayIdentifier < 0 || gatewayIdentifier > 0xFF) {
@@ -29,5 +32,24 @@ public record GwInfoPacket(int gatewayIdentifier, byte[] gatewayAddress) {
   @Override
   public byte[] gatewayAddress() {
     return gatewayAddress.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof GwInfoPacket packet
+        && gatewayIdentifier == packet.gatewayIdentifier
+        && Arrays.equals(gatewayAddress, packet.gatewayAddress);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Objects.hash(gatewayIdentifier) + Arrays.hashCode(gatewayAddress);
+  }
+
+  @Override
+  public String toString() {
+    return "GwInfoPacket[gatewayIdentifier=" + gatewayIdentifier
+        + ", gatewayAddress=" + Arrays.toString(gatewayAddress) + "]";
   }
 }
