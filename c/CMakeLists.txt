@@ -40,4 +40,8 @@ if(OpenSSL_FOUND)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(mqttsn2_openssl PRIVATE -Wall -Wextra -Wpedantic -Werror)
     endif()
+
+    add_executable(mqttsn2_openssl_test test/test_openssl_provider.c)
+    target_link_libraries(mqttsn2_openssl_test PRIVATE mqttsn2_openssl)
+    add_test(NAME mqttsn2_openssl_test COMMAND mqttsn2_openssl_test)
 endif()
