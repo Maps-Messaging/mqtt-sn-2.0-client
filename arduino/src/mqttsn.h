@@ -23,5 +23,6 @@
 #include "mqttsn/packets.h"
 #include "mqttsn/client.h"
 #include "mqttsn/protection.h"
+#include "mqttsn/auth.h"
 
 #endif
