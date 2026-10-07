@@ -310,6 +310,9 @@ mqttsn_status_t mqttsn_decode_suback(
   suback->topic_type = (mqttsn_topic_type_t)topic_type;
   suback->has_topic_alias = (uint8_t)((flags & 0x04u) != 0u);
   suback->packet_identifier = read_u16_packet(body + offset);
+  if (suback->packet_identifier == 0u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
   offset += 2u;
 
   if (suback->has_topic_alias) {
