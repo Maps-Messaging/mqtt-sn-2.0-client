@@ -19,15 +19,23 @@
 package io.mapsmessaging.mqttsn.auth;
 
 import java.util.Objects;
+import java.util.function.Supplier;
 import javax.security.sasl.SaslClient;
 import javax.security.sasl.SaslException;
 
 public final class SaslAuthenticationMechanism implements AuthenticationMechanism {
-  private final SaslClient saslClient;
+  private SaslClient saslClient;
+  private final Supplier<SaslClient> factory;
   private boolean initialResponseGenerated;
 
   public SaslAuthenticationMechanism(SaslClient saslClient) {
     this.saslClient = Objects.requireNonNull(saslClient, "saslClient");
+    this.factory = null;
+  }
+
+  public SaslAuthenticationMechanism(Supplier<SaslClient> factory) {
+    this.factory = Objects.requireNonNull(factory, "factory");
+    this.saslClient = Objects.requireNonNull(factory.get(), "factory returned null SaslClient");
   }
 
   @Override
@@ -58,7 +66,23 @@ public final class SaslAuthenticationMechanism implements AuthenticationMechanis
   }
 
   @Override
+  public void reset() {
+    if (factory == null) {
+      throw new IllegalStateException(
+          "Re-authentication requires a SaslClient factory");
+    }
+    dispose();
+    saslClient = Objects.requireNonNull(
+        factory.get(), "factory returned null SaslClient");
+    initialResponseGenerated = false;
+  }
+
+  @Override
   public void close() {
+    dispose();
+  }
+
+  private void dispose() {
     try {
       saslClient.dispose();
     } catch (SaslException ex) {
