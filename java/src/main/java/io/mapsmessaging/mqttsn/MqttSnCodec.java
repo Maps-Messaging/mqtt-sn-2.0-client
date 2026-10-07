@@ -353,6 +353,127 @@ public final class MqttSnCodec {
 
 
 
+
+  public static byte[] encodePubWos(PubWosPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    byte[] topicName = packet.topic().type() == TopicType.NAME
+        ? packet.topic().name().getBytes(StandardCharsets.UTF_8)
+        : new byte[0];
+    byte[] payload = packet.payload();
+
+    int flags = packet.topic().type().value();
+    if (packet.retain()) {
+      flags |= 0x10;
+    }
+
+    ByteBuffer body = ByteBuffer.allocate(3 + topicName.length + payload.length);
+    body.put((byte) flags);
+    if (packet.topic().type() == TopicType.NAME) {
+      body.putShort((short) topicName.length);
+      body.put(topicName);
+    } else {
+      body.putShort((short) packet.topic().alias());
+    }
+    body.put(payload);
+    return encode(PacketType.PUBWOS, body.array());
+  }
+
+  public static PubWosPacket decodePubWos(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.PUBWOS) {
+      throw malformed("Expected PUBWOS");
+    }
+
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    requireRemaining(body, 3, "PUBWOS");
+    int flags = Byte.toUnsignedInt(body.get());
+    if ((flags & 0xEC) != 0) {
+      throw malformed("PUBWOS reserved flags are non-zero");
+    }
+
+    TopicType topicType = TopicType.fromValue(flags & 0x03);
+    if (topicType == TopicType.SESSION_ALIAS) {
+      throw malformed("PUBWOS Topic Type must be Predefined Topic Alias or Topic Name");
+    }
+
+    int topicValue = Short.toUnsignedInt(body.getShort());
+    TopicRef topic;
+    if (topicType == TopicType.NAME) {
+      requireRemaining(body, topicValue, "PUBWOS Topic Name");
+      ByteBuffer topicBytes = body.slice();
+      topicBytes.limit(topicValue);
+      String name = MqttSnUtf8.decode(topicBytes);
+      MqttSnTopics.validateName(name);
+      topic = TopicRef.name(name);
+      body.position(body.position() + topicValue);
+    } else {
+      if (topicValue == 0) {
+        throw malformed("PUBWOS Predefined Topic Alias must be non-zero");
+      }
+      topic = TopicRef.predefinedAlias(topicValue);
+    }
+
+    byte[] payload = new byte[body.remaining()];
+    body.get(payload);
+    return new PubWosPacket((flags & 0x10) != 0, topic, payload);
+  }
+
+  public static byte[] encodeAdvertise(AdvertisePacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    ByteBuffer body = ByteBuffer.allocate(3);
+    body.put((byte) packet.gatewayIdentifier());
+    body.putShort((short) packet.durationSeconds());
+    return encode(PacketType.ADVERTISE, body.array());
+  }
+
+  public static AdvertisePacket decodeAdvertise(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.ADVERTISE || packet.body().remaining() != 3) {
+      throw malformed("Invalid ADVERTISE packet");
+    }
+    ByteBuffer body = packet.body();
+    return new AdvertisePacket(
+        Byte.toUnsignedInt(body.get()),
+        Short.toUnsignedInt(body.getShort()));
+  }
+
+  public static byte[] encodeSearchGw(SearchGwPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    return encode(PacketType.SEARCHGW, packet.additionalNetworkInformation());
+  }
+
+  public static SearchGwPacket decodeSearchGw(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.SEARCHGW) {
+      throw malformed("Expected SEARCHGW");
+    }
+    byte[] additional = new byte[packet.body().remaining()];
+    packet.body().get(additional);
+    return new SearchGwPacket(additional);
+  }
+
+  public static byte[] encodeGwInfo(GwInfoPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    byte[] address = packet.gatewayAddress();
+    ByteBuffer body = ByteBuffer.allocate(1 + address.length);
+    body.put((byte) packet.gatewayIdentifier());
+    body.put(address);
+    return encode(PacketType.GWINFO, body.array());
+  }
+
+  public static GwInfoPacket decodeGwInfo(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.GWINFO) {
+      throw malformed("Expected GWINFO");
+    }
+    ByteBuffer body = packet.body();
+    requireRemaining(body, 1, "GWINFO Gateway Identifier");
+    int gatewayIdentifier = Byte.toUnsignedInt(body.get());
+    byte[] address = new byte[body.remaining()];
+    body.get(address);
+    return new GwInfoPacket(gatewayIdentifier, address);
+  }
+
   public static byte[] encodeAuth(AuthPacket auth) {
     Objects.requireNonNull(auth, "auth");
     byte[] method = auth.authenticationMethod().getBytes(StandardCharsets.UTF_8);
