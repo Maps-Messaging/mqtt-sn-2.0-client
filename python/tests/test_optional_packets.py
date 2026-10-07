@@ -1,3 +1,9 @@
+"""MQTT-SN 2.0 CSD01 §3.6.1 and §3.20 conformance tests.
+
+Covers MQTT-SN-3.6.1.2-1/-2, MQTT-SN-3.6.1.2.1-1,
+MQTT-SN-3.6.1.4-1/-2 and MQTT-SN-3.6.1.6-1.
+"""
+
 import pytest
 
 from mqttsn2 import (
