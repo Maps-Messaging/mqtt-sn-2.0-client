@@ -89,6 +89,17 @@ struct ConnAckView {
 };
 
 
+
+struct ConnectionEncapsulation {
+  std::string_view clientIdentifier{};
+  std::span<const std::uint8_t> mqttSnPacket{};
+};
+
+struct ForwarderEncapsulation {
+  std::span<const std::uint8_t> clientAddressingInformation{};
+  std::span<const std::uint8_t> mqttSnPacket{};
+};
+
 struct PubWosPacket {
   bool retain{false};
   mqttsn_topic_type_t topicType{MQTTSN_TOPIC_NAME};
@@ -173,6 +184,90 @@ class KeepAliveTimer {
 class Codec {
  public:
 
+
+
+  static std::vector<std::uint8_t> encodeConnectionEncapsulation(
+      const ConnectionEncapsulation& encapsulation) {
+    const mqttsn_connection_encapsulation_t native{
+        reinterpret_cast<const std::uint8_t*>(encapsulation.clientIdentifier.data()),
+        encapsulation.clientIdentifier.size(),
+        encapsulation.mqttSnPacket.data(),
+        encapsulation.mqttSnPacket.size()};
+    std::vector<std::uint8_t> output(
+        8u + encapsulation.clientIdentifier.size() + encapsulation.mqttSnPacket.size());
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_connection_encapsulation(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static ConnectionEncapsulation decodeConnectionEncapsulation(
+      const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_connection_encapsulation_t native{};
+    const auto status = mqttsn_decode_connection_encapsulation(
+        &nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return ConnectionEncapsulation{
+        std::string_view(
+            reinterpret_cast<const char*>(native.client_identifier),
+            native.client_identifier_length),
+        std::span<const std::uint8_t>(
+            native.mqttsn_packet, native.mqttsn_packet_length)};
+  }
+
+  static std::vector<std::uint8_t> encodeForwarderEncapsulation(
+      const ForwarderEncapsulation& encapsulation) {
+    const mqttsn_forwarder_encapsulation_t native{
+        encapsulation.clientAddressingInformation.data(),
+        encapsulation.clientAddressingInformation.size(),
+        encapsulation.mqttSnPacket.data(),
+        encapsulation.mqttSnPacket.size()};
+    std::vector<std::uint8_t> output(
+        7u + encapsulation.clientAddressingInformation.size()
+        + encapsulation.mqttSnPacket.size());
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_forwarder_encapsulation(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static ForwarderEncapsulation decodeForwarderEncapsulation(
+      const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_forwarder_encapsulation_t native{};
+    const auto status = mqttsn_decode_forwarder_encapsulation(
+        &nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return ForwarderEncapsulation{
+        std::span<const std::uint8_t>(
+            native.client_addressing_information,
+            native.client_addressing_information_length),
+        std::span<const std::uint8_t>(
+            native.mqttsn_packet, native.mqttsn_packet_length)};
+  }
 
   static std::vector<std::uint8_t> encodePubWos(const PubWosPacket& packet) {
     mqttsn_pubwos_t native{};
