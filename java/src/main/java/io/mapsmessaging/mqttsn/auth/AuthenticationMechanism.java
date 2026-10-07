@@ -27,6 +27,9 @@ public interface AuthenticationMechanism extends AutoCloseable {
 
   boolean complete();
 
+  default void reset() {
+  }
+
   @Override
   default void close() {
   }
