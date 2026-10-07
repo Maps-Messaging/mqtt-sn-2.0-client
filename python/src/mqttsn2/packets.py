@@ -166,6 +166,33 @@ class PingResp:
     application_messages_remaining: int | None
 
 
+
+
+@dataclass(frozen=True)
+class DisconnectOptions:
+    packet_identifier: int | None = None
+    reason_code: int | None = None
+    session_expiry_interval: int | None = None
+    reason_string: str = ""
+
+    def __post_init__(self) -> None:
+        if self.packet_identifier is not None and not 1 <= self.packet_identifier <= 0xFFFF:
+            raise ValueError("packet_identifier must be 1..65535 when present")
+        if self.reason_code is not None and not 0 <= self.reason_code <= 0xFF:
+            raise ValueError("reason_code must be 0..255 when present")
+        if self.session_expiry_interval is not None and not 0 <= self.session_expiry_interval <= 0xFFFF_FFFF:
+            raise ValueError("session_expiry_interval must be 0..4294967295 when present")
+        _decode_utf8(self.reason_string.encode("utf-8"))
+
+
+@dataclass(frozen=True)
+class DisconnectPacket:
+    packet_identifier: int | None
+    reason_code: int | None
+    session_expiry_interval: int | None
+    reason_string: str
+
+
 @dataclass(frozen=True)
 class SleepRequest:
     packet_identifier: int
@@ -431,3 +458,63 @@ def decode_sleepresp(packet: DecodedPacket) -> SleepResponse:
 
 def encode_wakeup() -> bytes:
     return encode_packet(PacketType.WAKEUP)
+
+
+def encode_disconnect(options: DisconnectOptions) -> bytes:
+    flags = 0
+    body = bytearray([0])
+
+    if options.packet_identifier is not None:
+        flags |= 0x01
+        body += options.packet_identifier.to_bytes(2, "big")
+    if options.reason_code is not None:
+        flags |= 0x04
+        body.append(options.reason_code)
+    if options.session_expiry_interval is not None:
+        flags |= 0x02
+        body += options.session_expiry_interval.to_bytes(4, "big")
+    if options.reason_string:
+        body += options.reason_string.encode("utf-8")
+
+    body[0] = flags
+    return encode_packet(PacketType.DISCONNECT, body)
+
+
+def decode_disconnect(packet: DecodedPacket) -> DisconnectPacket:
+    if packet.type is not PacketType.DISCONNECT or len(packet.body) < 1:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid DISCONNECT packet")
+
+    body = packet.body
+    flags = body[0]
+    if flags & 0xF8:
+        raise MqttSnError("MALFORMED_PACKET", "DISCONNECT reserved flags are non-zero")
+
+    offset = 1
+    packet_identifier: int | None = None
+    reason_code: int | None = None
+    session_expiry_interval: int | None = None
+
+    if flags & 0x01:
+        if len(body) - offset < 2:
+            raise MqttSnError("MALFORMED_PACKET", "DISCONNECT Packet Identifier is truncated")
+        packet_identifier = int.from_bytes(body[offset : offset + 2], "big")
+        if packet_identifier == 0:
+            raise MqttSnError("MALFORMED_PACKET", "DISCONNECT Packet Identifier must be non-zero")
+        offset += 2
+
+    if flags & 0x04:
+        if len(body) - offset < 1:
+            raise MqttSnError("MALFORMED_PACKET", "DISCONNECT Reason Code is truncated")
+        reason_code = body[offset]
+        offset += 1
+
+    if flags & 0x02:
+        if len(body) - offset < 4:
+            raise MqttSnError("MALFORMED_PACKET", "DISCONNECT Session Expiry Interval is truncated")
+        session_expiry_interval = int.from_bytes(body[offset : offset + 4], "big")
+        offset += 4
+
+    reason_string = _decode_utf8(body[offset:]) if offset < len(body) else ""
+    return DisconnectPacket(
+        packet_identifier, reason_code, session_expiry_interval, reason_string
+    )
