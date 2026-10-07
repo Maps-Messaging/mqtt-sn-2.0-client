@@ -533,6 +533,202 @@ mqttsn_status_t mqttsn_decode_sleepresp(
 
 
 
+
+mqttsn_status_t mqttsn_encode_pubwos(
+    const mqttsn_pubwos_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t prefix[3];
+  mqttsn_buffer_t parts[3];
+  size_t part_count = 2u;
+  uint8_t flags;
+
+  if (packet == NULL || output == NULL || written == NULL ||
+      (packet->payload == NULL && packet->payload_length != 0u)) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->topic.type == MQTTSN_TOPIC_SESSION_ALIAS) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  flags = (uint8_t)packet->topic.type;
+  if (packet->retain) {
+    flags |= 0x10u;
+  }
+  prefix[0] = flags;
+
+  if (packet->topic.type == MQTTSN_TOPIC_NAME) {
+    if (!mqttsn_topic_name_is_valid(packet->topic.name, packet->topic.name_length) ||
+        packet->topic.name_length > 0xFFFFu) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    write_u16_packet(prefix + 1u, (uint16_t)packet->topic.name_length);
+    parts[0] = (mqttsn_buffer_t){prefix, sizeof(prefix)};
+    parts[1] = (mqttsn_buffer_t){packet->topic.name, packet->topic.name_length};
+    parts[2] = (mqttsn_buffer_t){packet->payload, packet->payload_length};
+    part_count = 3u;
+  } else if (packet->topic.type == MQTTSN_TOPIC_PREDEFINED_ALIAS) {
+    if (packet->topic.alias == 0u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    write_u16_packet(prefix + 1u, packet->topic.alias);
+    parts[0] = (mqttsn_buffer_t){prefix, sizeof(prefix)};
+    parts[1] = (mqttsn_buffer_t){packet->payload, packet->payload_length};
+  } else {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  return mqttsn_encode_packetv(
+      MQTTSN_PUBWOS, parts, part_count, output, output_capacity, written);
+}
+
+mqttsn_status_t mqttsn_decode_pubwos(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_pubwos_t *pubwos) {
+  const uint8_t *body;
+  size_t offset = 0u;
+  uint8_t flags;
+  uint16_t topic_value;
+
+  if (packet == NULL || pubwos == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_PUBWOS || packet->body_length < 3u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  memset(pubwos, 0, sizeof(*pubwos));
+  body = packet->body;
+  flags = body[offset++];
+  if ((flags & 0xECu) != 0u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  pubwos->retain = (uint8_t)((flags & 0x10u) != 0u);
+  pubwos->topic.type = (mqttsn_topic_type_t)(flags & 0x03u);
+  topic_value = read_u16_packet(body + offset);
+  offset += 2u;
+
+  if (pubwos->topic.type == MQTTSN_TOPIC_NAME) {
+    if (packet->body_length - offset < topic_value || topic_value == 0u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    pubwos->topic.name = body + offset;
+    pubwos->topic.name_length = topic_value;
+    if (!mqttsn_topic_name_is_valid(pubwos->topic.name, pubwos->topic.name_length)) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    offset += topic_value;
+  } else if (pubwos->topic.type == MQTTSN_TOPIC_PREDEFINED_ALIAS) {
+    if (topic_value == 0u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    pubwos->topic.alias = topic_value;
+  } else {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  pubwos->payload = body + offset;
+  pubwos->payload_length = packet->body_length - offset;
+  return MQTTSN_OK;
+}
+
+mqttsn_status_t mqttsn_encode_advertise(
+    const mqttsn_advertise_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t body[3];
+  if (packet == NULL || output == NULL || written == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  body[0] = packet->gateway_identifier;
+  write_u16_packet(body + 1u, packet->duration);
+  return mqttsn_encode_packet(
+      MQTTSN_ADVERTISE, body, sizeof(body), output, output_capacity, written);
+}
+
+mqttsn_status_t mqttsn_decode_advertise(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_advertise_t *advertise) {
+  if (packet == NULL || advertise == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_ADVERTISE || packet->body_length != 3u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+  advertise->gateway_identifier = packet->body[0];
+  advertise->duration = read_u16_packet(packet->body + 1u);
+  return MQTTSN_OK;
+}
+
+mqttsn_status_t mqttsn_encode_searchgw(
+    const mqttsn_searchgw_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  if (packet == NULL || output == NULL || written == NULL ||
+      (packet->additional_network_information == NULL &&
+       packet->additional_network_information_length != 0u)) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  return mqttsn_encode_packet(
+      MQTTSN_SEARCHGW,
+      packet->additional_network_information,
+      packet->additional_network_information_length,
+      output, output_capacity, written);
+}
+
+mqttsn_status_t mqttsn_decode_searchgw(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_searchgw_t *searchgw) {
+  if (packet == NULL || searchgw == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_SEARCHGW) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+  searchgw->additional_network_information = packet->body;
+  searchgw->additional_network_information_length = packet->body_length;
+  return MQTTSN_OK;
+}
+
+mqttsn_status_t mqttsn_encode_gwinfo(
+    const mqttsn_gwinfo_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t gateway_identifier;
+  mqttsn_buffer_t parts[2];
+
+  if (packet == NULL || output == NULL || written == NULL ||
+      (packet->gateway_address == NULL && packet->gateway_address_length != 0u)) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  gateway_identifier = packet->gateway_identifier;
+  parts[0] = (mqttsn_buffer_t){&gateway_identifier, 1u};
+  parts[1] = (mqttsn_buffer_t){packet->gateway_address, packet->gateway_address_length};
+
+  return mqttsn_encode_packetv(
+      MQTTSN_GWINFO, parts, 2u, output, output_capacity, written);
+}
+
+mqttsn_status_t mqttsn_decode_gwinfo(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_gwinfo_t *gwinfo) {
+  if (packet == NULL || gwinfo == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_GWINFO || packet->body_length < 1u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+  gwinfo->gateway_identifier = packet->body[0];
+  gwinfo->gateway_address = packet->body + 1u;
+  gwinfo->gateway_address_length = packet->body_length - 1u;
+  return MQTTSN_OK;
+}
+
 mqttsn_status_t mqttsn_encode_auth(
     const mqttsn_auth_t *auth,
     uint8_t *output,
