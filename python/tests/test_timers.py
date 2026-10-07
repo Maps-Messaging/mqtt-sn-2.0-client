@@ -1,3 +1,8 @@
+"""MQTT-SN 2.0 CSD01 §4.4.2 and §3.1.6 timer conformance tests.
+
+Covers MQTT-SN-4.4.2-1/-2/-5/-7 and MQTT-SN-3.1.6-1/-3.
+"""
+
 from mqttsn2 import (
     KeepAliveAction,
     KeepAliveTimer,
