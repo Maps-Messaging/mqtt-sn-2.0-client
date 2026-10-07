@@ -6,6 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * MQTT-SN 2.0 CSD01: §4.4.2 Unacknowledged Packets and §3.1.6 Keep Alive.
+ * Covers MQTT-SN-4.4.2-1/-2/-5/-7 and MQTT-SN-3.1.6-1/-3.
+ */
 class TimerTest {
 
   @Test
