@@ -12,6 +12,8 @@ from .codec import (
 from .client import Client
 from .packets import (
     Ack,
+    ForwarderEncapsulation,
+    ConnectionEncapsulation,
     GwInfoPacket,
     SearchGwPacket,
     AdvertisePacket,
@@ -30,6 +32,8 @@ from .packets import (
     TopicRef,
     TopicType,
     decode_ack,
+    decode_forwarder_encapsulation,
+    decode_connection_encapsulation,
     decode_gwinfo,
     decode_searchgw,
     decode_advertise,
@@ -41,6 +45,8 @@ from .packets import (
     decode_sleepresp,
     decode_suback,
     encode_ack,
+    encode_forwarder_encapsulation,
+    encode_connection_encapsulation,
     encode_gwinfo,
     encode_searchgw,
     encode_advertise,
@@ -58,6 +64,8 @@ from .packets import (
 
 __all__ = [
     "Ack",
+    "ForwarderEncapsulation",
+    "ConnectionEncapsulation",
     "GwInfoPacket",
     "SearchGwPacket",
     "AdvertisePacket",
@@ -82,6 +90,8 @@ __all__ = [
     "TopicRef",
     "TopicType",
     "decode_ack",
+    "decode_forwarder_encapsulation",
+    "decode_connection_encapsulation",
     "decode_gwinfo",
     "decode_searchgw",
     "decode_advertise",
@@ -95,6 +105,8 @@ __all__ = [
     "decode_sleepresp",
     "decode_suback",
     "encode_ack",
+    "encode_forwarder_encapsulation",
+    "encode_connection_encapsulation",
     "encode_gwinfo",
     "encode_searchgw",
     "encode_advertise",
