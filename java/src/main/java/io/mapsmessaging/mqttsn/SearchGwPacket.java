@@ -18,6 +18,8 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+
 public record SearchGwPacket(byte[] additionalNetworkInformation) {
   public SearchGwPacket {
     additionalNetworkInformation =
@@ -27,5 +29,23 @@ public record SearchGwPacket(byte[] additionalNetworkInformation) {
   @Override
   public byte[] additionalNetworkInformation() {
     return additionalNetworkInformation.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof SearchGwPacket packet
+        && Arrays.equals(additionalNetworkInformation, packet.additionalNetworkInformation);
+  }
+
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(additionalNetworkInformation);
+  }
+
+  @Override
+  public String toString() {
+    return "SearchGwPacket[additionalNetworkInformation="
+        + Arrays.toString(additionalNetworkInformation) + "]";
   }
 }
