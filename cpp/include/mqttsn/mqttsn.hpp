@@ -92,6 +92,8 @@ struct ConnectOptions {
   std::uint16_t keepAliveSeconds{};
   std::uint16_t maximumPacketSize{};
   std::string_view clientIdentifier{};
+  std::string_view authenticationMethod{};
+  std::span<const std::uint8_t> authenticationData{};
 };
 
 struct ConnAckView {
@@ -898,10 +900,19 @@ class Codec {
         options.packetIdentifier,
         options.keepAliveSeconds,
         options.maximumPacketSize,
+        reinterpret_cast<const std::uint8_t*>(options.authenticationMethod.data()),
+        options.authenticationMethod.size(),
+        options.authenticationData.data(),
+        options.authenticationData.size(),
         reinterpret_cast<const std::uint8_t*>(options.clientIdentifier.data()),
         options.clientIdentifier.size()};
 
-    const std::size_t bodyLength = 8u + options.clientIdentifier.size();
+    const std::size_t authLength = options.authenticationMethod.empty()
+        ? 0u
+        : 1u + options.authenticationMethod.size()
+            + 2u + options.authenticationData.size();
+    const std::size_t bodyLength =
+        8u + authLength + options.clientIdentifier.size();
     const std::size_t capacity = bodyLength <= 253u
         ? bodyLength + 2u
         : bodyLength + 4u;
