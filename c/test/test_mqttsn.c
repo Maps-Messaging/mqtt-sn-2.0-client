@@ -781,6 +781,84 @@ static void test_pubwos_and_gateway_discovery(void) {
   assert(decoded_gwinfo.gateway_address_length == 4u);
 }
 
+
+static void test_connection_and_forwarder_encapsulation(void) {
+  const uint8_t client_id[] = "client1";
+  const uint8_t addressing[] = {0x01, 0x02};
+  const uint8_t inner[] = {0x04, MQTTSN_PINGREQ, 0x12, 0x34};
+  const uint8_t disallowed_inner[] = {
+      0x06, MQTTSN_CONNACK, 0x00, 0x12, 0x34, 0x00
+  };
+  mqttsn_connection_encapsulation_t connection = {
+      .client_identifier = client_id,
+      .client_identifier_length = sizeof(client_id) - 1u,
+      .mqttsn_packet = inner,
+      .mqttsn_packet_length = sizeof(inner)
+  };
+  mqttsn_forwarder_encapsulation_t forwarder = {
+      .client_addressing_information = addressing,
+      .client_addressing_information_length = sizeof(addressing),
+      .mqttsn_packet = inner,
+      .mqttsn_packet_length = sizeof(inner)
+  };
+  uint8_t output[64];
+  size_t written = 0u;
+  size_t consumed = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_connection_encapsulation_t decoded_connection;
+  mqttsn_forwarder_encapsulation_t decoded_forwarder;
+
+  assert(mqttsn_encode_connection_encapsulation(
+      &connection, output, sizeof(output), &written) == MQTTSN_OK);
+  {
+    const uint8_t expected[] = {
+        0x0F, MQTTSN_CONNECTION_ENCAPSULATION,
+        0x00, 0x07,
+        'c', 'l', 'i', 'e', 'n', 't', '1',
+        0x04, MQTTSN_PINGREQ, 0x12, 0x34
+    };
+    assert(written == sizeof(expected));
+    assert(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+  assert(mqttsn_decode_packet(output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_connection_encapsulation(
+      &packet, &decoded_connection) == MQTTSN_OK);
+  assert(decoded_connection.client_identifier_length == 7u);
+  assert(decoded_connection.mqttsn_packet_length == sizeof(inner));
+
+  connection.mqttsn_packet = disallowed_inner;
+  connection.mqttsn_packet_length = sizeof(disallowed_inner);
+  assert(mqttsn_encode_connection_encapsulation(
+      &connection, output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+
+  assert(mqttsn_encode_forwarder_encapsulation(
+      &forwarder, output, sizeof(output), &written) == MQTTSN_OK);
+  {
+    const uint8_t expected[] = {
+        0x09, MQTTSN_FORWARDER_ENCAPSULATION,
+        0x02, 0x01, 0x02,
+        0x04, MQTTSN_PINGREQ, 0x12, 0x34
+    };
+    assert(written == sizeof(expected));
+    assert(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+  assert(mqttsn_decode_packet(output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_forwarder_encapsulation(
+      &packet, &decoded_forwarder) == MQTTSN_OK);
+  assert(decoded_forwarder.client_addressing_information_length == 2u);
+  assert(decoded_forwarder.mqttsn_packet_length == sizeof(inner));
+
+  {
+    const uint8_t missing_inner[] = {
+        0x04, MQTTSN_FORWARDER_ENCAPSULATION, 0x01, 0x55
+    };
+    assert(mqttsn_decode_packet(
+        missing_inner, sizeof(missing_inner), &packet, &consumed) == MQTTSN_OK);
+    assert(mqttsn_decode_forwarder_encapsulation(
+        &packet, &decoded_forwarder) == MQTTSN_MALFORMED_PACKET);
+  }
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -805,5 +883,6 @@ int main(void) {
   test_disconnect_codec();
   test_auth_codec();
   test_pubwos_and_gateway_discovery();
+  test_connection_and_forwarder_encapsulation();
   return 0;
 }
