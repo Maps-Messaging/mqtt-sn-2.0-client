@@ -1,0 +1,89 @@
+package io.mapsmessaging.mqttsn;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.nio.ByteBuffer;
+import org.junit.jupiter.api.Test;
+
+class OptionalPacketCodecTest {
+
+  @Test
+  void pubWosTopicNameMatchesCsd01WireShape() {
+    byte[] encoded = MqttSnCodec.encodePubWos(
+        new PubWosPacket(false, TopicRef.name("a/b"), new byte[] {'x'}));
+
+    assertArrayEquals(
+        new byte[] {0x09, 0x12, 0x03, 0x00, 0x03, 'a', '/', 'b', 'x'},
+        encoded);
+
+    PubWosPacket decoded = MqttSnCodec.decodePubWos(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+    assertEquals("a/b", decoded.topic().name());
+    assertArrayEquals(new byte[] {'x'}, decoded.payload());
+  }
+
+  @Test
+  void pubWosPredefinedAliasAndRetainRoundTrip() {
+    byte[] encoded = MqttSnCodec.encodePubWos(
+        new PubWosPacket(true, TopicRef.predefinedAlias(42), new byte[0]));
+    PubWosPacket decoded = MqttSnCodec.decodePubWos(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+
+    assertEquals(42, decoded.topic().alias());
+    assertEquals(true, decoded.retain());
+  }
+
+  @Test
+  void pubWosRejectsSessionAliasAndReservedFlags() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new PubWosPacket(false, TopicRef.sessionAlias(1), new byte[0]));
+
+    MqttSnException error = assertThrows(
+        MqttSnException.class,
+        () -> MqttSnCodec.decodePubWos(
+            MqttSnCodec.decode(ByteBuffer.wrap(
+                new byte[] {0x05, 0x12, 0x20, 0x00, 0x01}))));
+    assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
+  }
+
+  @Test
+  void advertiseRoundTrip() {
+    byte[] encoded = MqttSnCodec.encodeAdvertise(new AdvertisePacket(7, 60));
+    assertArrayEquals(new byte[] {0x05, 0x16, 0x07, 0x00, 0x3C}, encoded);
+
+    AdvertisePacket decoded = MqttSnCodec.decodeAdvertise(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+    assertEquals(7, decoded.gatewayIdentifier());
+    assertEquals(60, decoded.durationSeconds());
+  }
+
+  @Test
+  void searchGwCarriesOpaqueNetworkInformation() {
+    byte[] encoded = MqttSnCodec.encodeSearchGw(
+        new SearchGwPacket(new byte[] {0x01, 0x02}));
+    assertArrayEquals(new byte[] {0x04, 0x17, 0x01, 0x02}, encoded);
+
+    SearchGwPacket decoded = MqttSnCodec.decodeSearchGw(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+    assertArrayEquals(new byte[] {0x01, 0x02}, decoded.additionalNetworkInformation());
+  }
+
+  @Test
+  void gwInfoCarriesOptionalGatewayAddress() {
+    byte[] encoded = MqttSnCodec.encodeGwInfo(
+        new GwInfoPacket(7, new byte[] {(byte) 192, (byte) 168, 1, 1}));
+    assertArrayEquals(
+        new byte[] {0x07, 0x18, 0x07, (byte) 192, (byte) 168, 1, 1},
+        encoded);
+
+    GwInfoPacket decoded = MqttSnCodec.decodeGwInfo(
+        MqttSnCodec.decode(ByteBuffer.wrap(encoded)));
+    assertEquals(7, decoded.gatewayIdentifier());
+    assertArrayEquals(
+        new byte[] {(byte) 192, (byte) 168, 1, 1},
+        decoded.gatewayAddress());
+  }
+}
