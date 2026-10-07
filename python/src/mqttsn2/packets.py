@@ -564,3 +564,137 @@ def decode_auth(packet: DecodedPacket) -> AuthPacket:
     method = _decode_utf8(packet.body[4 : 4 + method_length])
     data = bytes(packet.body[4 + method_length :])
     return AuthPacket(packet_identifier, reason_code, method, data)
+
+
+@dataclass(frozen=True)
+class PubWosPacket:
+    retain: bool
+    topic: TopicRef
+    payload: bytes = b""
+
+    def __post_init__(self) -> None:
+        if self.topic.type is TopicType.SESSION_ALIAS:
+            raise ValueError("PUBWOS does not allow Session Topic Alias")
+        if self.topic.type is TopicType.NAME:
+            _validate_topic_name(self.topic.name)
+
+
+@dataclass(frozen=True)
+class AdvertisePacket:
+    gateway_identifier: int
+    duration_seconds: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.gateway_identifier <= 0xFF:
+            raise ValueError("gateway_identifier must be 0..255")
+        if not 0 <= self.duration_seconds <= 0xFFFF:
+            raise ValueError("duration_seconds must be 0..65535")
+
+
+@dataclass(frozen=True)
+class SearchGwPacket:
+    additional_network_information: bytes = b""
+
+
+@dataclass(frozen=True)
+class GwInfoPacket:
+    gateway_identifier: int
+    gateway_address: bytes = b""
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.gateway_identifier <= 0xFF:
+            raise ValueError("gateway_identifier must be 0..255")
+
+
+def encode_pubwos(packet: PubWosPacket) -> bytes:
+    flags = int(packet.topic.type)
+    if packet.retain:
+        flags |= 0x10
+
+    body = bytearray([flags])
+    if packet.topic.type is TopicType.NAME:
+        topic = _validate_topic_name(packet.topic.name)
+        body += len(topic).to_bytes(2, "big")
+        body += topic
+    elif packet.topic.type is TopicType.PREDEFINED_ALIAS:
+        if not 1 <= packet.topic.alias <= 0xFFFF:
+            raise ValueError("Predefined Topic Alias must be 1..65535")
+        body += packet.topic.alias.to_bytes(2, "big")
+    else:
+        raise ValueError("PUBWOS Topic Type must be Predefined Topic Alias or Topic Name")
+
+    body += packet.payload
+    return encode_packet(PacketType.PUBWOS, body)
+
+
+def decode_pubwos(packet: DecodedPacket) -> PubWosPacket:
+    if packet.type is not PacketType.PUBWOS or len(packet.body) < 3:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid PUBWOS packet")
+
+    flags = packet.body[0]
+    if flags & 0xEC:
+        raise MqttSnError("MALFORMED_PACKET", "PUBWOS reserved flags are non-zero")
+
+    try:
+        topic_type = TopicType(flags & 0x03)
+    except ValueError as exc:
+        raise MqttSnError("MALFORMED_PACKET", "Reserved PUBWOS Topic Type") from exc
+
+    if topic_type is TopicType.SESSION_ALIAS:
+        raise MqttSnError(
+            "MALFORMED_PACKET",
+            "PUBWOS Topic Type must be Predefined Topic Alias or Topic Name",
+        )
+
+    topic_value = int.from_bytes(packet.body[1:3], "big")
+    offset = 3
+
+    if topic_type is TopicType.NAME:
+        if topic_value == 0 or len(packet.body) - offset < topic_value:
+            raise MqttSnError("MALFORMED_PACKET", "PUBWOS Topic Name is invalid")
+        name = _decode_utf8(packet.body[offset : offset + topic_value])
+        _validate_topic_name(name)
+        topic = TopicRef.topic_name(name)
+        offset += topic_value
+    else:
+        if topic_value == 0:
+            raise MqttSnError("MALFORMED_PACKET", "PUBWOS Predefined Topic Alias must be non-zero")
+        topic = TopicRef.predefined_alias(topic_value)
+
+    return PubWosPacket(bool(flags & 0x10), topic, bytes(packet.body[offset:]))
+
+
+def encode_advertise(packet: AdvertisePacket) -> bytes:
+    return encode_packet(
+        PacketType.ADVERTISE,
+        bytes([packet.gateway_identifier]) + packet.duration_seconds.to_bytes(2, "big"),
+    )
+
+
+def decode_advertise(packet: DecodedPacket) -> AdvertisePacket:
+    if packet.type is not PacketType.ADVERTISE or len(packet.body) != 3:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid ADVERTISE packet")
+    return AdvertisePacket(packet.body[0], int.from_bytes(packet.body[1:3], "big"))
+
+
+def encode_searchgw(packet: SearchGwPacket) -> bytes:
+    return encode_packet(PacketType.SEARCHGW, packet.additional_network_information)
+
+
+def decode_searchgw(packet: DecodedPacket) -> SearchGwPacket:
+    if packet.type is not PacketType.SEARCHGW:
+        raise MqttSnError("MALFORMED_PACKET", "Expected SEARCHGW")
+    return SearchGwPacket(bytes(packet.body))
+
+
+def encode_gwinfo(packet: GwInfoPacket) -> bytes:
+    return encode_packet(
+        PacketType.GWINFO,
+        bytes([packet.gateway_identifier]) + packet.gateway_address,
+    )
+
+
+def decode_gwinfo(packet: DecodedPacket) -> GwInfoPacket:
+    if packet.type is not PacketType.GWINFO or len(packet.body) < 1:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid GWINFO packet")
+    return GwInfoPacket(packet.body[0], bytes(packet.body[1:]))
