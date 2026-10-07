@@ -159,10 +159,175 @@ static void test_inbound_flow_control(void) {
   assert(client.has_inbound_request == 0u);
 }
 
+
+static void test_packet_identifier_wraps_without_zero(void) {
+  mqttsn_client_t client;
+
+  mqttsn_client_init(&client, 0xFFFFu);
+  assert(mqttsn_client_next_packet_identifier(&client) == 0xFFFFu);
+  assert(mqttsn_client_next_packet_identifier(&client) == 1u);
+  assert(mqttsn_client_next_packet_identifier(&client) == 2u);
+}
+
+static void test_retry_exhaustion_disconnects(void) {
+  const uint8_t filter[] = "sensors/+";
+  mqttsn_subscribe_options_t subscribe = {
+      .packet_identifier = 0x5001u,
+      .topic = {
+          .type = MQTTSN_TOPIC_NAME,
+          .alias = 0u,
+          .name = filter,
+          .name_length = sizeof(filter) - 1u
+      },
+      .retain_handling = 0u,
+      .retain_as_published = 0u,
+      .maximum_qos = MQTTSN_QOS_1,
+      .no_local = 0u
+  };
+  mqttsn_client_t client;
+  uint8_t packet[64];
+  size_t written = 0u;
+
+  connect_client(&client);
+  assert(mqttsn_encode_subscribe(
+      &subscribe, packet, sizeof(packet), &written) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(
+      &client, packet, written) == MQTTSN_OK);
+
+  mqttsn_client_retry_exhausted(&client);
+
+  assert(client.state == MQTTSN_CLIENT_DISCONNECTED);
+  assert(client.has_outbound_request == 0u);
+  assert(client.has_inbound_request == 0u);
+}
+
+static void test_same_request_can_be_tracked_as_retransmission(void) {
+  const uint8_t filter[] = "sensors/+";
+  mqttsn_subscribe_options_t subscribe = {
+      .packet_identifier = 0x6001u,
+      .topic = {
+          .type = MQTTSN_TOPIC_NAME,
+          .alias = 0u,
+          .name = filter,
+          .name_length = sizeof(filter) - 1u
+      },
+      .retain_handling = 0u,
+      .retain_as_published = 0u,
+      .maximum_qos = MQTTSN_QOS_1,
+      .no_local = 0u
+  };
+  mqttsn_client_t client;
+  uint8_t packet[64];
+  size_t written = 0u;
+
+  connect_client(&client);
+  assert(mqttsn_encode_subscribe(
+      &subscribe, packet, sizeof(packet), &written) == MQTTSN_OK);
+
+  assert(mqttsn_client_track_outbound(
+      &client, packet, written) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(
+      &client, packet, written) == MQTTSN_OK);
+  assert(client.has_outbound_request == 1u);
+  assert(client.outbound_packet_identifier == 0x6001u);
+}
+
+static void test_mismatched_response_is_rejected(void) {
+  const uint8_t filter[] = "sensors/+";
+  mqttsn_subscribe_options_t subscribe = {
+      .packet_identifier = 0x7001u,
+      .topic = {
+          .type = MQTTSN_TOPIC_NAME,
+          .alias = 0u,
+          .name = filter,
+          .name_length = sizeof(filter) - 1u
+      },
+      .retain_handling = 0u,
+      .retain_as_published = 0u,
+      .maximum_qos = MQTTSN_QOS_1,
+      .no_local = 0u
+  };
+  const uint8_t wrong_suback[] = {
+      0x05, MQTTSN_SUBACK, 0x00, 0x70, 0x02
+  };
+  mqttsn_client_t client;
+  uint8_t packet[64];
+  size_t written = 0u;
+
+  connect_client(&client);
+  assert(mqttsn_encode_subscribe(
+      &subscribe, packet, sizeof(packet), &written) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(
+      &client, packet, written) == MQTTSN_OK);
+
+  assert(mqttsn_client_track_inbound(
+      &client, wrong_suback, sizeof(wrong_suback)) == MQTTSN_STATE_ERROR);
+  assert(client.has_outbound_request == 1u);
+}
+
+static void test_state_restrictions(void) {
+  mqttsn_client_t client;
+
+  mqttsn_client_init(&client, 1u);
+  assert(mqttsn_client_can_send(&client, MQTTSN_CONNECT));
+  assert(mqttsn_client_can_send(&client, MQTTSN_PUBWOS));
+  assert(!mqttsn_client_can_send(&client, MQTTSN_PUBLISH));
+  assert(!mqttsn_client_can_send(&client, MQTTSN_SUBSCRIBE));
+
+  client.state = MQTTSN_CLIENT_ASLEEP;
+  assert(mqttsn_client_can_send(&client, MQTTSN_PINGREQ));
+  assert(mqttsn_client_can_send(&client, MQTTSN_CONNECT));
+  assert(mqttsn_client_can_send(&client, MQTTSN_DISCONNECT));
+  assert(!mqttsn_client_can_send(&client, MQTTSN_REGISTER));
+
+  client.state = MQTTSN_CLIENT_AWAKE;
+  assert(mqttsn_client_can_send(&client, MQTTSN_PUBACK));
+  assert(mqttsn_client_can_send(&client, MQTTSN_PUBREC));
+  assert(mqttsn_client_can_send(&client, MQTTSN_PUBCOMP));
+  assert(mqttsn_client_can_send(&client, MQTTSN_REGACK));
+  assert(!mqttsn_client_can_send(&client, MQTTSN_PUBLISH));
+  assert(!mqttsn_client_can_send(&client, MQTTSN_SUBSCRIBE));
+}
+
+static void test_failed_connack_disconnects(void) {
+  const uint8_t client_id[] = "failed-connect";
+  mqttsn_connect_options_t options = {
+      .clean_start = 1u,
+      .allow_network_address_changes = 0u,
+      .allow_server_suggested_values = 0u,
+      .packet_identifier = 0x8001u,
+      .keep_alive = 60u,
+      .maximum_packet_size = 0u,
+      .client_identifier = client_id,
+      .client_identifier_length = sizeof(client_id) - 1u
+  };
+  const uint8_t connack[] = {
+      0x06, MQTTSN_CONNACK, 0x00, 0x80, 0x01, 0x80
+  };
+  mqttsn_client_t client;
+  uint8_t connect[64];
+  size_t written = 0u;
+
+  mqttsn_client_init(&client, 1u);
+  assert(mqttsn_encode_connect(
+      &options, connect, sizeof(connect), &written) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(
+      &client, connect, written) == MQTTSN_OK);
+  assert(mqttsn_client_track_inbound(
+      &client, connack, sizeof(connack)) == MQTTSN_OK);
+  assert(client.state == MQTTSN_CLIENT_DISCONNECTED);
+}
+
 int main(void) {
   test_connection_state();
   test_outbound_flow_control();
   test_sleep_and_awake_state();
   test_inbound_flow_control();
+  test_packet_identifier_wraps_without_zero();
+  test_retry_exhaustion_disconnects();
+  test_same_request_can_be_tracked_as_retransmission();
+  test_mismatched_response_is_rejected();
+  test_state_restrictions();
+  test_failed_connack_disconnects();
   return 0;
 }
