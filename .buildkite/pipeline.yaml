@@ -7,6 +7,7 @@ steps:
       - "mvn --batch-mode clean verify"
     artifact_paths:
       - "java/target/mqtt-sn-2-client-*.jar"
+      - "java-bouncycastle/target/mqtt-sn-2-client-protection-bc-*.jar"
     agents:
       queue: "java_build_queue_aws"
 
