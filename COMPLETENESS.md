@@ -44,10 +44,10 @@ Legend:
 | Forwarder Encapsulation | Generic | Generic | Generic | Generic | Shared C |
 | Connection Encapsulation | Generic | Generic | Generic | Generic | Shared C |
 | Protection Encapsulation | Generic | Generic | Generic | Generic | Shared C |
-| Client state transitions | Implemented foundation | Missing wrapper | Missing | Missing | Shared C |
-| One-outstanding-request flow control | Implemented foundation | Missing wrapper | Missing | Missing | Shared C |
-| Packet-id allocation | Implemented foundation | Missing wrapper | Missing | Missing | Shared C |
-| Retry exhaustion state handling | Implemented foundation | Missing wrapper | Missing | Missing | Shared C |
+| Client state transitions | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
+| One-outstanding-request flow control | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
+| Packet-id allocation | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
+| Retry exhaustion state handling | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
 | Retry timer/backoff scheduler | Missing | Missing | Missing | Missing | Missing |
 | Keep-alive timer scheduler | Missing | Missing | Missing | Missing | Missing |
 | Session persistence | Missing | Missing | Missing | Missing | Missing |
@@ -76,7 +76,7 @@ verify wrapper wire results, boundary handling, error propagation, and delegatio
 
 ### Java
 
-JUnit tests cover:
+The Java artifact also includes a UDP adapter over the transport-neutral session/controller.\n\nJUnit tests cover:
 
 - every defined and representative reserved packet type;
 - short/extended/max packet framing boundaries;
@@ -106,7 +106,7 @@ into an Arduino-specific test implementation.
 At minimum, the following remain required:
 
 1. typed codecs for every control packet applicable to that client;
-2. client state/flow controller in Java and Python and a C++ wrapper for the C controller;
+2. client state/flow controller in Python and a C++ wrapper for the C controller;
 3. retry, keep-alive and sleep timers driven by caller-supplied time rather than transport code;
 4. AUTH packet codecs and authentication exchange state;
 5. DISCONNECT typed codec and reason/session-expiry handling;
