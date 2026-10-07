@@ -228,6 +228,47 @@ static void test_timer_wrappers() {
   assert(keepAlive.poll(1900u) == mqttsn::KeepAliveAction::SendPingReq);
 }
 
+
+static void test_encapsulation_wrappers() {
+  const std::array<std::uint8_t, 4> inner{
+      0x04u, 0x0Cu, 0x12u, 0x34u};
+
+  const auto connectionBytes = mqttsn::Codec::encodeConnectionEncapsulation(
+      mqttsn::ConnectionEncapsulation{"client1", inner});
+  const std::vector<std::uint8_t> expectedConnection{
+      0x0F, 0xFE, 0x00, 0x07,
+      'c', 'l', 'i', 'e', 'n', 't', '1',
+      0x04, 0x0C, 0x12, 0x34};
+  assert(connectionBytes == expectedConnection);
+
+  const auto connection = mqttsn::Codec::decodeConnectionEncapsulation(
+      mqttsn::Codec::decode(connectionBytes));
+  assert(connection.clientIdentifier == "client1");
+  assert(connection.mqttSnPacket.size() == 4u);
+
+  const std::array<std::uint8_t, 2> addressing{0x01u, 0x02u};
+  const auto forwarderBytes = mqttsn::Codec::encodeForwarderEncapsulation(
+      mqttsn::ForwarderEncapsulation{addressing, inner});
+  const std::vector<std::uint8_t> expectedForwarder{
+      0x09, 0xFC, 0x02, 0x01, 0x02, 0x04, 0x0C, 0x12, 0x34};
+  assert(forwarderBytes == expectedForwarder);
+
+  const auto forwarder = mqttsn::Codec::decodeForwarderEncapsulation(
+      mqttsn::Codec::decode(forwarderBytes));
+  assert(forwarder.clientAddressingInformation.size() == 2u);
+  assert(forwarder.mqttSnPacket.size() == 4u);
+
+  const std::array<std::uint8_t, 6> connack{
+      0x06u, 0x02u, 0x00u, 0x12u, 0x34u, 0x00u};
+  try {
+    (void)mqttsn::Codec::encodeConnectionEncapsulation(
+        mqttsn::ConnectionEncapsulation{"client1", connack});
+    assert(false);
+  } catch (const mqttsn::Error& error) {
+    assert(error.status() == MQTTSN_MALFORMED_PACKET);
+  }
+}
+
 int main() {
   test_short_and_extended_framing();
   test_connect_and_connack();
@@ -237,5 +278,6 @@ int main() {
   test_all_packet_types_can_use_generic_framing();
   test_pubwos_and_gateway_discovery_wrappers();
   test_timer_wrappers();
+  test_encapsulation_wrappers();
   return 0;
 }
