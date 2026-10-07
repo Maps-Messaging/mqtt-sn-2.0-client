@@ -22,7 +22,8 @@ Transport-neutral MQTT-SN 2.0 reference clients for validating protocol implemen
 arduino/       Arduino examples using the C core
 c/             Canonical portable C implementation
 cpp/           Thin C++ wrapper over the C implementation
-java/          Java implementation
+java/          Java core implementation
+java-bouncycastle/ Optional Bouncy Castle protection provider
 python/        Python implementation
 shared/        Language-neutral specification data and conformance vectors
 SPECIFICATION.md  Exact normative draft baseline
