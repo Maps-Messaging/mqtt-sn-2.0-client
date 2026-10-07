@@ -3,11 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from .codec import DecodedPacket, MqttSnError, PacketType, decode_packet
+from .codec import DecodedPacket, MqttSnError, PacketType, decode_connack, decode_packet
 from .packets import (
     QoS,
     decode_ack,
-    decode_connack,
     decode_pingresp,
     decode_publish,
     decode_sleepresp,
