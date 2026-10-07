@@ -6,6 +6,7 @@ add_library(mqttsn2 STATIC
     src/packets.c
     src/client.c
     src/protection.c
+    src/auth.c
 )
 target_include_directories(mqttsn2
     PUBLIC
