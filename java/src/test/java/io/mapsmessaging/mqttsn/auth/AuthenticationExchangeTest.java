@@ -68,11 +68,12 @@ class AuthenticationExchangeTest {
         new AuthenticationExchange(new TestMechanism());
     exchange.initialResponse();
 
+    AuthPacket changedMethod =
+        new AuthPacket(1, 0x18, "OTHER", new byte[0]);
+
     assertThrows(
         MqttSnException.class,
-        () -> exchange.continueAuthentication(
-            new AuthPacket(1, 0x18, "OTHER", new byte[0]),
-            2));
+        () -> exchange.continueAuthentication(changedMethod, 2));
   }
 
   @Test
@@ -203,6 +204,7 @@ class AuthenticationExchangeTest {
 
     @Override
     public void dispose() {
+      // Nothing to dispose in this test stub.
     }
   }
 }

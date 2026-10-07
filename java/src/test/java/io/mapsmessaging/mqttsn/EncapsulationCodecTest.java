@@ -57,10 +57,12 @@ class EncapsulationCodecTest {
   void connectionEncapsulationRejectsDisallowedInnerPacket() {
     byte[] connAck = new byte[] {0x06, 0x02, 0x00, 0x12, 0x34, 0x00};
 
+    ConnectionEncapsulation encapsulation =
+        new ConnectionEncapsulation("client1", connAck);
+
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.encodeConnectionEncapsulation(
-            new ConnectionEncapsulation("client1", connAck)));
+        () -> MqttSnCodec.encodeConnectionEncapsulation(encapsulation));
 
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
@@ -72,10 +74,12 @@ class EncapsulationCodecTest {
         0x04, 0x0C, 0x56, 0x78
     };
 
+    ConnectionEncapsulation encapsulation =
+        new ConnectionEncapsulation("client1", twoPackets);
+
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.encodeConnectionEncapsulation(
-            new ConnectionEncapsulation("client1", twoPackets)));
+        () -> MqttSnCodec.encodeConnectionEncapsulation(encapsulation));
 
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
@@ -102,11 +106,12 @@ class EncapsulationCodecTest {
 
   @Test
   void forwarderEncapsulationRejectsMissingInnerPacket() {
+    DecodedPacket encoded = MqttSnCodec.decode(ByteBuffer.wrap(
+        new byte[] {0x04, (byte) 0xFC, 0x01, 0x55}));
+
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodeForwarderEncapsulation(
-            MqttSnCodec.decode(ByteBuffer.wrap(
-                new byte[] {0x04, (byte) 0xFC, 0x01, 0x55}))));
+        () -> MqttSnCodec.decodeForwarderEncapsulation(encoded));
 
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }

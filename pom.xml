@@ -37,7 +37,7 @@
     <maven.source.version>3.3.1</maven.source.version>
     <maven.javadoc.version>3.11.2</maven.javadoc.version>
     <maven.deploy.version>3.1.4</maven.deploy.version>
-    <jacoco.version>0.8.14</jacoco.version>
+    <jacoco.version>0.8.15</jacoco.version>
   </properties>
 
   <modules>

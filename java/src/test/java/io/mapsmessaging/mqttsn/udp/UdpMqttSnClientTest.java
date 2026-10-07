@@ -103,9 +103,10 @@ class UdpMqttSnClientTest {
           incomplete.length,
           client.localAddress()));
 
+      Duration timeout = Duration.ofSeconds(2);
       MqttSnException error = assertThrows(
           MqttSnException.class,
-          () -> client.receive(Duration.ofSeconds(2), packet -> { }));
+          () -> client.receive(timeout, packet -> { }));
 
       assertEquals(MqttSnError.NEED_MORE, error.error());
     }

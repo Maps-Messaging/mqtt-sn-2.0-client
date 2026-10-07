@@ -88,9 +88,10 @@ class MqttSnSessionTest {
         false));
     session.trackOutbound(subscribe);
 
+    byte[] ping = MqttSnCodec.encodePingReq(0x2002);
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> session.trackOutbound(MqttSnCodec.encodePingReq(0x2002)));
+        () -> session.trackOutbound(ping));
 
     assertEquals(MqttSnError.FLOW_CONTROL, error.error());
     assertTrue(session.hasOutboundRequest());
