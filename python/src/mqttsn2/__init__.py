@@ -139,6 +139,11 @@ __all__ = [
     "encode_subscribe",
     "encode_unsubscribe",
     "encode_wakeup",
+    "AUTH_CONTINUE",
+    "AUTH_REAUTHENTICATE",
+    "AUTH_SUCCESS",
+    "AuthenticationExchange",
+    "AuthenticationMechanism",
     "ProtectedContent",
     "ProtectionContext",
     "ProtectionEnvelope",
@@ -164,4 +169,12 @@ from .protection import (
     ProtectionProvider,
     decode_protection,
     encode_protection,
+)
+
+from .auth import (
+    AUTH_CONTINUE,
+    AUTH_REAUTHENTICATE,
+    AUTH_SUCCESS,
+    AuthenticationExchange,
+    AuthenticationMechanism,
 )
