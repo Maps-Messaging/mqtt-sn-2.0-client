@@ -32,6 +32,12 @@ add_executable(mqttsn2_client_test
 target_link_libraries(mqttsn2_client_test PRIVATE mqttsn2)
 add_test(NAME mqttsn2_client_test COMMAND mqttsn2_client_test)
 
+add_executable(mqttsn2_auth_test
+    test/test_auth.c
+)
+target_link_libraries(mqttsn2_auth_test PRIVATE mqttsn2)
+add_test(NAME mqttsn2_auth_test COMMAND mqttsn2_auth_test)
+
 find_package(OpenSSL 3.0 QUIET COMPONENTS Crypto)
 if(OpenSSL_FOUND)
     add_library(mqttsn2_openssl STATIC src/protection_openssl.c)
