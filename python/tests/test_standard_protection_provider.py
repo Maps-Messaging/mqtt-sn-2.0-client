@@ -2,7 +2,8 @@
 
 import pytest
 
-from mqttsn2.protection import ProtectionContext
+from mqttsn2 import encode_pingreq
+from mqttsn2.protection import ProtectionContext, ProtectionEnvelope, decode_protection, encode_protection
 from mqttsn2.providers import CryptographyProtectionProvider
 
 PREFIX = bytes.fromhex("1200a1b2c3d4e5f60102030405060708")
@@ -84,3 +85,29 @@ def test_rejects_tampered_aead_tag() -> None:
     tag[0] ^= 1
 
     assert provider.unprotect(ctx, protected.protected_packet, bytes(tag)) is None
+
+
+@pytest.mark.parametrize(("scheme", "key_hex", "_protected_hex", "_tag_hex"), VECTORS)
+def test_standard_schemes_round_trip_through_protection_envelope(
+    scheme: int,
+    key_hex: str,
+    _protected_hex: str,
+    _tag_hex: str,
+) -> None:
+    key = bytes.fromhex(key_hex)
+    provider = CryptographyProtectionProvider(lambda _: key)
+    envelope = ProtectionEnvelope(
+        scheme,
+        0x01,
+        bytes.fromhex("0102030405060708"),
+        bytes.fromhex("11121314"),
+        b"",
+        b"",
+        encode_pingreq(0x1234),
+    )
+
+    encoded = encode_protection(envelope, provider)
+    decoded = decode_protection(encoded, provider)
+
+    assert decoded.scheme == scheme
+    assert decoded.mqttsn_packet == envelope.mqttsn_packet
