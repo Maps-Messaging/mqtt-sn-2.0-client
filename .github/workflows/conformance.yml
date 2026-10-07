@@ -1,0 +1,70 @@
+name: conformance
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test C
+        run: |
+          cmake -S c -B build/c
+          cmake --build build/c
+          ctest --test-dir build/c --output-on-failure
+      - name: Build and test C++
+        run: |
+          cmake -S cpp -B build/cpp
+          cmake --build build/cpp
+          ctest --test-dir build/cpp --output-on-failure
+
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build and test Java artifact
+        run: mvn --batch-mode clean verify
+      - name: Upload Java artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mqtt-sn-2-java-client
+          path: |
+            java/target/mqtt-sn-2-client-*.jar
+            java-bouncycastle/target/mqtt-sn-2-client-protection-bc-*.jar
+            !java/target/original-*.jar
+            !java-bouncycastle/target/original-*.jar
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Test Python
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python -m pytest
+
+  arduino:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install AVR core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+      - name: Compile buffer client example
+        run: |
+          arduino-cli compile             --fqbn arduino:avr:uno             --library arduino             arduino/examples/BufferClient

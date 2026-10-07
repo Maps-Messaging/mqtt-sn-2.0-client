@@ -1,0 +1,56 @@
+{
+  "specification": "MQTT-SN 2.0 CSD01",
+  "requirements": [
+    "MQTT-SN-2.1.2-1",
+    "Section 2.1.3"
+  ],
+  "vectors": [
+    {
+      "name": "short-pingreq",
+      "hex": "020c",
+      "type": "PINGREQ",
+      "bodyHex": "",
+      "valid": true
+    },
+    {
+      "name": "short-connect-empty-body",
+      "hex": "0201",
+      "type": "CONNECT",
+      "bodyHex": "",
+      "valid": true
+    },
+    {
+      "name": "extended-publish-256",
+      "generator": {
+        "totalLength": 256,
+        "type": "PUBLISH",
+        "bodyByte": 0
+      },
+      "valid": true
+    },
+    {
+      "name": "truncated-extended-header",
+      "hex": "0100",
+      "valid": false,
+      "error": "NEED_MORE"
+    },
+    {
+      "name": "reserved-zero",
+      "hex": "0200",
+      "valid": false,
+      "error": "RESERVED_TYPE"
+    },
+    {
+      "name": "reserved-fd",
+      "hex": "02fd",
+      "valid": false,
+      "error": "RESERVED_TYPE"
+    },
+    {
+      "name": "short-length-too-small",
+      "hex": "010002",
+      "valid": false,
+      "error": "NEED_MORE"
+    }
+  ]
+}
