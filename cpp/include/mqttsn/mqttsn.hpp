@@ -141,6 +141,75 @@ struct GwInfoPacket {
 };
 
 
+
+enum class ClientState {
+  None = MQTTSN_CLIENT_NONE,
+  Disconnected = MQTTSN_CLIENT_DISCONNECTED,
+  Connecting = MQTTSN_CLIENT_CONNECTING,
+  Active = MQTTSN_CLIENT_ACTIVE,
+  Asleep = MQTTSN_CLIENT_ASLEEP,
+  Awake = MQTTSN_CLIENT_AWAKE
+};
+
+class Session {
+ public:
+  explicit Session(std::uint16_t initialPacketIdentifier = 1u) {
+    mqttsn_client_init(&native_, initialPacketIdentifier);
+  }
+
+  [[nodiscard]] ClientState state() const noexcept {
+    return static_cast<ClientState>(native_.state);
+  }
+
+  [[nodiscard]] bool hasOutboundRequest() const noexcept {
+    return native_.has_outbound_request != 0;
+  }
+
+  [[nodiscard]] bool hasInboundRequest() const noexcept {
+    return native_.has_inbound_request != 0;
+  }
+
+  [[nodiscard]] std::uint16_t outboundPacketIdentifier() const noexcept {
+    return native_.outbound_packet_identifier;
+  }
+
+  [[nodiscard]] std::uint16_t inboundPacketIdentifier() const noexcept {
+    return native_.inbound_packet_identifier;
+  }
+
+  std::uint16_t nextPacketIdentifier() {
+    return mqttsn_client_next_packet_identifier(&native_);
+  }
+
+  [[nodiscard]] bool canSend(PacketType type) const {
+    return mqttsn_client_can_send(
+        &native_, static_cast<mqttsn_packet_type_t>(type)) != 0;
+  }
+
+  void trackOutbound(std::span<const std::uint8_t> packet) {
+    const auto status = mqttsn_client_track_outbound(
+        &native_, packet.data(), packet.size());
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+  }
+
+  void trackInbound(std::span<const std::uint8_t> packet) {
+    const auto status = mqttsn_client_track_inbound(
+        &native_, packet.data(), packet.size());
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+  }
+
+  void retryExhausted() {
+    mqttsn_client_retry_exhausted(&native_);
+  }
+
+ private:
+  mqttsn_client_t native_{};
+};
+
 enum class RetryAction {
   None = MQTTSN_RETRY_NONE,
   Retransmit = MQTTSN_RETRY_RETRANSMIT,
