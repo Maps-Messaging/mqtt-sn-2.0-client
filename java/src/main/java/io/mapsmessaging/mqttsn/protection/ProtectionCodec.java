@@ -129,7 +129,6 @@ public final class ProtectionCodec {
       throw malformed("Expected exactly one Protection Encapsulation packet");
     }
 
-    int headerLength = outer.headerLength();
     ByteBuffer body = outer.body();
     requireRemaining(body, 14, "Protection Encapsulation fixed fields");
 
