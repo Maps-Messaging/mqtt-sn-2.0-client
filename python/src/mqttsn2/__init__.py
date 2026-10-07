@@ -122,6 +122,12 @@ __all__ = [
     "encode_subscribe",
     "encode_unsubscribe",
     "encode_wakeup",
+    "ProtectedContent",
+    "ProtectionContext",
+    "ProtectionEnvelope",
+    "ProtectionProvider",
+    "decode_protection",
+    "encode_protection",
     "ClientState",
     "Session",
     "KeepAliveAction",
@@ -133,3 +139,12 @@ __all__ = [
 from .timers import KeepAliveAction, KeepAliveTimer, RetryAction, RetryTimer
 
 from .session import ClientState, Session
+
+from .protection import (
+    ProtectedContent,
+    ProtectionContext,
+    ProtectionEnvelope,
+    ProtectionProvider,
+    decode_protection,
+    encode_protection,
+)
