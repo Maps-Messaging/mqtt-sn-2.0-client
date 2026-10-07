@@ -209,6 +209,25 @@ static void test_pubwos_and_gateway_discovery_wrappers() {
   assert(gwInfo.gatewayAddress.size() == 4u);
 }
 
+
+static void test_timer_wrappers() {
+  mqttsn::RetryTimer retry(1000u, 2u);
+  retry.start(100u);
+  assert(retry.poll(1099u) == mqttsn::RetryAction::None);
+  assert(retry.poll(1100u) == mqttsn::RetryAction::Retransmit);
+  assert(retry.retriesSent() == 1u);
+  assert(retry.poll(2100u) == mqttsn::RetryAction::Retransmit);
+  assert(retry.poll(3100u) == mqttsn::RetryAction::DeleteConnection);
+  assert(!retry.active());
+
+  mqttsn::KeepAliveTimer keepAlive(1000u);
+  keepAlive.start(0u);
+  assert(keepAlive.poll(999u) == mqttsn::KeepAliveAction::None);
+  keepAlive.outboundActivity(900u);
+  assert(keepAlive.poll(1000u) == mqttsn::KeepAliveAction::None);
+  assert(keepAlive.poll(1900u) == mqttsn::KeepAliveAction::SendPingReq);
+}
+
 int main() {
   test_short_and_extended_framing();
   test_connect_and_connack();
@@ -217,5 +236,6 @@ int main() {
   test_connect_validation_is_delegated_to_c();
   test_all_packet_types_can_use_generic_framing();
   test_pubwos_and_gateway_discovery_wrappers();
+  test_timer_wrappers();
   return 0;
 }
