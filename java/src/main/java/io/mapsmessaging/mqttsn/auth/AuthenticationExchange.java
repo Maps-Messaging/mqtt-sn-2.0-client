@@ -44,7 +44,6 @@ public final class AuthenticationExchange implements AutoCloseable {
   }
 
   public byte[] initialResponse() {
-    mechanism.reset();
     active = true;
     byte[] response = mechanism.initialResponse();
     return response == null ? new byte[0] : response.clone();
@@ -95,6 +94,7 @@ public final class AuthenticationExchange implements AutoCloseable {
     if (active) {
       throw state("Authentication exchange is already active");
     }
+    mechanism.reset();
     active = true;
     byte[] response = mechanism.initialResponse();
     return new AuthPacket(
