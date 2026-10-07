@@ -11,6 +11,7 @@ extern "C" {
 #include "mqttsn/mqttsn.h"
 #include "mqttsn/packets.h"
 #include "mqttsn/client.h"
+#include "mqttsn/protection.h"
 }
 
 namespace mqttsn {
@@ -142,6 +143,65 @@ struct GwInfoPacket {
 
 
 
+
+struct ProtectionContext {
+  std::uint8_t scheme{};
+  std::uint8_t tagLengthCode{};
+  std::span<const std::uint8_t> senderIdentifier{};
+  std::span<const std::uint8_t> random{};
+  std::span<const std::uint8_t> cryptographicMaterial{};
+  std::span<const std::uint8_t> monotonicCounter{};
+  std::span<const std::uint8_t> authenticatedPrefix{};
+};
+
+struct ProtectedContent {
+  std::vector<std::uint8_t> protectedPacket;
+  std::vector<std::uint8_t> authenticationTag;
+};
+
+class ProtectionProvider {
+ public:
+  virtual ~ProtectionProvider() = default;
+
+  virtual bool supports(std::uint8_t scheme) const = 0;
+  virtual bool authenticationOnly(std::uint8_t scheme) const = 0;
+  virtual std::size_t authenticationTagLength(
+      std::uint8_t scheme,
+      std::uint8_t tagLengthCode) const = 0;
+  virtual std::size_t protectedPacketLength(
+      std::uint8_t scheme,
+      std::size_t mqttSnPacketLength) const = 0;
+
+  virtual ProtectedContent protect(
+      const ProtectionContext& context,
+      std::span<const std::uint8_t> mqttSnPacket) = 0;
+
+  virtual std::vector<std::uint8_t> unprotect(
+      const ProtectionContext& context,
+      std::span<const std::uint8_t> protectedPacket,
+      std::span<const std::uint8_t> authenticationTag) = 0;
+};
+
+struct ProtectionEnvelope {
+  std::uint8_t scheme{};
+  std::uint8_t tagLengthCode{};
+  std::span<const std::uint8_t> senderIdentifier{};
+  std::span<const std::uint8_t> random{};
+  std::span<const std::uint8_t> cryptographicMaterial{};
+  std::span<const std::uint8_t> monotonicCounter{};
+  std::span<const std::uint8_t> mqttSnPacket{};
+};
+
+struct DecodedProtectionEnvelope {
+  std::uint8_t scheme{};
+  std::uint8_t tagLengthCode{};
+  std::vector<std::uint8_t> senderIdentifier;
+  std::vector<std::uint8_t> random;
+  std::vector<std::uint8_t> cryptographicMaterial;
+  std::vector<std::uint8_t> monotonicCounter;
+  std::vector<std::uint8_t> mqttSnPacket;
+};
+
 enum class ClientState {
   None = MQTTSN_CLIENT_NONE,
   Disconnected = MQTTSN_CLIENT_DISCONNECTED,
@@ -149,6 +209,224 @@ enum class ClientState {
   Active = MQTTSN_CLIENT_ACTIVE,
   Asleep = MQTTSN_CLIENT_ASLEEP,
   Awake = MQTTSN_CLIENT_AWAKE
+};
+
+
+class ProtectionCodec {
+ public:
+  static std::vector<std::uint8_t> encode(
+      const ProtectionEnvelope& envelope,
+      ProtectionProvider& provider) {
+    ProviderBridge bridge(provider);
+    const mqttsn_protection_provider_t nativeProvider = bridge.native();
+
+    const mqttsn_protection_envelope_t nativeEnvelope{
+        envelope.scheme,
+        envelope.tagLengthCode,
+        envelope.senderIdentifier.data(),
+        envelope.senderIdentifier.size(),
+        envelope.random.data(),
+        envelope.random.size(),
+        envelope.cryptographicMaterial.data(),
+        envelope.cryptographicMaterial.size(),
+        envelope.monotonicCounter.data(),
+        envelope.monotonicCounter.size(),
+        envelope.mqttSnPacket.data(),
+        envelope.mqttSnPacket.size()};
+
+    std::vector<std::uint8_t> output(MQTTSN_MAX_PACKET_SIZE);
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_protection(
+        &nativeEnvelope,
+        &nativeProvider,
+        output.data(),
+        output.size(),
+        &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static DecodedProtectionEnvelope decode(
+      std::span<const std::uint8_t> encoded,
+      ProtectionProvider& provider) {
+    ProviderBridge bridge(provider);
+    const mqttsn_protection_provider_t nativeProvider = bridge.native();
+
+    std::vector<std::uint8_t> inner(MQTTSN_MAX_PACKET_SIZE);
+    std::size_t innerWritten = 0;
+    mqttsn_protection_envelope_t nativeEnvelope{};
+
+    const auto status = mqttsn_decode_protection(
+        encoded.data(),
+        encoded.size(),
+        &nativeProvider,
+        inner.data(),
+        inner.size(),
+        &innerWritten,
+        &nativeEnvelope);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+
+    inner.resize(innerWritten);
+    return DecodedProtectionEnvelope{
+        nativeEnvelope.scheme,
+        nativeEnvelope.tag_length_code,
+        std::vector<std::uint8_t>(
+            nativeEnvelope.sender_identifier,
+            nativeEnvelope.sender_identifier + nativeEnvelope.sender_identifier_length),
+        std::vector<std::uint8_t>(
+            nativeEnvelope.random,
+            nativeEnvelope.random + nativeEnvelope.random_length),
+        std::vector<std::uint8_t>(
+            nativeEnvelope.cryptographic_material,
+            nativeEnvelope.cryptographic_material
+                + nativeEnvelope.cryptographic_material_length),
+        std::vector<std::uint8_t>(
+            nativeEnvelope.monotonic_counter,
+            nativeEnvelope.monotonic_counter + nativeEnvelope.monotonic_counter_length),
+        std::move(inner)};
+  }
+
+ private:
+  class ProviderBridge {
+   public:
+    explicit ProviderBridge(ProtectionProvider& provider) : provider_(provider) {}
+
+    mqttsn_protection_provider_t native() {
+      mqttsn_protection_provider_t result{};
+      result.user_data = this;
+      result.supports = &supports;
+      result.authentication_only = &authenticationOnly;
+      result.authentication_tag_length = &authenticationTagLength;
+      result.protected_packet_length = &protectedPacketLength;
+      result.protect = &protect;
+      result.unprotect = &unprotect;
+      return result;
+    }
+
+   private:
+    static ProviderBridge& self(void* userData) {
+      return *static_cast<ProviderBridge*>(userData);
+    }
+
+    static int supports(void* userData, std::uint8_t scheme) {
+      return self(userData).provider_.supports(scheme) ? 1 : 0;
+    }
+
+    static int authenticationOnly(void* userData, std::uint8_t scheme) {
+      return self(userData).provider_.authenticationOnly(scheme) ? 1 : 0;
+    }
+
+    static std::size_t authenticationTagLength(
+        void* userData,
+        std::uint8_t scheme,
+        std::uint8_t tagLengthCode) {
+      return self(userData).provider_.authenticationTagLength(
+          scheme, tagLengthCode);
+    }
+
+    static std::size_t protectedPacketLength(
+        void* userData,
+        std::uint8_t scheme,
+        std::size_t mqttSnPacketLength) {
+      return self(userData).provider_.protectedPacketLength(
+          scheme, mqttSnPacketLength);
+    }
+
+    static mqttsn_status_t protect(
+        void* userData,
+        const mqttsn_protection_context_t* context,
+        const std::uint8_t* mqttSnPacket,
+        std::size_t mqttSnPacketLength,
+        std::uint8_t* protectedPacket,
+        std::size_t protectedPacketCapacity,
+        std::size_t* protectedPacketWritten,
+        std::uint8_t* authenticationTag,
+        std::size_t authenticationTagCapacity,
+        std::size_t* authenticationTagWritten) {
+      try {
+        const ProtectionContext cppContext = toCpp(*context);
+        const ProtectedContent content = self(userData).provider_.protect(
+            cppContext,
+            std::span<const std::uint8_t>(mqttSnPacket, mqttSnPacketLength));
+
+        if (content.protectedPacket.size() > protectedPacketCapacity ||
+            content.authenticationTag.size() > authenticationTagCapacity) {
+          return MQTTSN_BUFFER_TOO_SMALL;
+        }
+
+        std::copy(
+            content.protectedPacket.begin(),
+            content.protectedPacket.end(),
+            protectedPacket);
+        std::copy(
+            content.authenticationTag.begin(),
+            content.authenticationTag.end(),
+            authenticationTag);
+
+        *protectedPacketWritten = content.protectedPacket.size();
+        *authenticationTagWritten = content.authenticationTag.size();
+        return MQTTSN_OK;
+      } catch (...) {
+        return MQTTSN_MALFORMED_PACKET;
+      }
+    }
+
+    static mqttsn_status_t unprotect(
+        void* userData,
+        const mqttsn_protection_context_t* context,
+        const std::uint8_t* protectedPacket,
+        std::size_t protectedPacketLength,
+        const std::uint8_t* authenticationTag,
+        std::size_t authenticationTagLength,
+        std::uint8_t* mqttSnPacket,
+        std::size_t mqttSnPacketCapacity,
+        std::size_t* mqttSnPacketWritten) {
+      try {
+        const ProtectionContext cppContext = toCpp(*context);
+        const auto plain = self(userData).provider_.unprotect(
+            cppContext,
+            std::span<const std::uint8_t>(
+                protectedPacket, protectedPacketLength),
+            std::span<const std::uint8_t>(
+                authenticationTag, authenticationTagLength));
+
+        if (plain.size() > mqttSnPacketCapacity) {
+          return MQTTSN_BUFFER_TOO_SMALL;
+        }
+        std::copy(plain.begin(), plain.end(), mqttSnPacket);
+        *mqttSnPacketWritten = plain.size();
+        return MQTTSN_OK;
+      } catch (...) {
+        return MQTTSN_MALFORMED_PACKET;
+      }
+    }
+
+    static ProtectionContext toCpp(
+        const mqttsn_protection_context_t& context) {
+      return ProtectionContext{
+          context.scheme,
+          context.tag_length_code,
+          std::span<const std::uint8_t>(
+              context.sender_identifier, context.sender_identifier_length),
+          std::span<const std::uint8_t>(
+              context.random, context.random_length),
+          std::span<const std::uint8_t>(
+              context.cryptographic_material,
+              context.cryptographic_material_length),
+          std::span<const std::uint8_t>(
+              context.monotonic_counter, context.monotonic_counter_length),
+          std::span<const std::uint8_t>(
+              context.authenticated_prefix,
+              context.authenticated_prefix_length)};
+    }
+
+    ProtectionProvider& provider_;
+  };
 };
 
 class Session {
