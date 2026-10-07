@@ -399,6 +399,9 @@ mqttsn_status_t mqttsn_decode_connack(
 
   connack->session_present = (uint8_t)(flags & 0x01u);
   connack->packet_identifier = read_u16(body + offset);
+  if (connack->packet_identifier == 0u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
   offset += 2u;
   connack->reason_code = body[offset++];
 
