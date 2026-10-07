@@ -4,5 +4,6 @@
 #include "mqttsn/mqttsn.h"
 #include "mqttsn/packets.h"
 #include "mqttsn/client.h"
+#include "mqttsn/protection.h"
 
 #endif
