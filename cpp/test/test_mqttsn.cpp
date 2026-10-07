@@ -158,6 +158,57 @@ static void test_all_packet_types_can_use_generic_framing() {
   }
 }
 
+
+static void test_pubwos_and_gateway_discovery_wrappers() {
+  const std::array<std::uint8_t, 1> payload{'x'};
+  const mqttsn::PubWosPacket pubwos{
+      false,
+      MQTTSN_TOPIC_NAME,
+      0u,
+      "a/b",
+      payload};
+  const auto pubwosBytes = mqttsn::Codec::encodePubWos(pubwos);
+  const std::vector<std::uint8_t> expectedPubWos{
+      0x09, 0x12, 0x03, 0x00, 0x03, 'a', '/', 'b', 'x'};
+  assert(pubwosBytes == expectedPubWos);
+  const auto decodedPubWos =
+      mqttsn::Codec::decodePubWos(mqttsn::Codec::decode(pubwosBytes));
+  assert(decodedPubWos.topicName == "a/b");
+  assert(decodedPubWos.payload.size() == 1u);
+  assert(decodedPubWos.payload[0] == 'x');
+
+  const auto advertiseBytes =
+      mqttsn::Codec::encodeAdvertise(mqttsn::AdvertisePacket{7u, 60u});
+  const std::vector<std::uint8_t> expectedAdvertise{
+      0x05, 0x16, 0x07, 0x00, 0x3C};
+  assert(advertiseBytes == expectedAdvertise);
+  const auto advertise =
+      mqttsn::Codec::decodeAdvertise(mqttsn::Codec::decode(advertiseBytes));
+  assert(advertise.gatewayIdentifier == 7u);
+  assert(advertise.durationSeconds == 60u);
+
+  const std::array<std::uint8_t, 2> networkInfo{0x01u, 0x02u};
+  const auto searchBytes =
+      mqttsn::Codec::encodeSearchGw(mqttsn::SearchGwPacket{networkInfo});
+  const std::vector<std::uint8_t> expectedSearch{
+      0x04, 0x17, 0x01, 0x02};
+  assert(searchBytes == expectedSearch);
+  const auto search =
+      mqttsn::Codec::decodeSearchGw(mqttsn::Codec::decode(searchBytes));
+  assert(search.additionalNetworkInformation.size() == 2u);
+
+  const std::array<std::uint8_t, 4> address{0xC0u, 0xA8u, 0x01u, 0x01u};
+  const auto gwInfoBytes =
+      mqttsn::Codec::encodeGwInfo(mqttsn::GwInfoPacket{7u, address});
+  const std::vector<std::uint8_t> expectedGwInfo{
+      0x07, 0x18, 0x07, 0xC0, 0xA8, 0x01, 0x01};
+  assert(gwInfoBytes == expectedGwInfo);
+  const auto gwInfo =
+      mqttsn::Codec::decodeGwInfo(mqttsn::Codec::decode(gwInfoBytes));
+  assert(gwInfo.gatewayIdentifier == 7u);
+  assert(gwInfo.gatewayAddress.size() == 4u);
+}
+
 int main() {
   test_short_and_extended_framing();
   test_connect_and_connack();
@@ -165,5 +216,6 @@ int main() {
   test_invalid_input_reports_native_status();
   test_connect_validation_is_delegated_to_c();
   test_all_packet_types_can_use_generic_framing();
+  test_pubwos_and_gateway_discovery_wrappers();
   return 0;
 }
