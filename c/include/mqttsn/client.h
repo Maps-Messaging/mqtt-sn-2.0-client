@@ -56,6 +56,67 @@ mqttsn_status_t mqttsn_client_track_inbound(
     const uint8_t *packet,
     size_t packet_length);
 
+
+typedef enum {
+  MQTTSN_RETRY_NONE = 0,
+  MQTTSN_RETRY_RETRANSMIT = 1,
+  MQTTSN_RETRY_DELETE_CONNECTION = 2
+} mqttsn_retry_action_t;
+
+typedef struct {
+  uint64_t retry_interval_ms;
+  uint32_t maximum_retry_count;
+  uint32_t retries_sent;
+  uint64_t deadline_ms;
+  uint8_t active;
+} mqttsn_retry_timer_t;
+
+void mqttsn_retry_timer_init(
+    mqttsn_retry_timer_t *timer,
+    uint64_t retry_interval_ms,
+    uint32_t maximum_retry_count);
+
+void mqttsn_retry_timer_start(
+    mqttsn_retry_timer_t *timer,
+    uint64_t now_ms);
+
+void mqttsn_retry_timer_cancel(
+    mqttsn_retry_timer_t *timer);
+
+mqttsn_retry_action_t mqttsn_retry_timer_poll(
+    mqttsn_retry_timer_t *timer,
+    uint64_t now_ms);
+
+typedef enum {
+  MQTTSN_KEEP_ALIVE_NONE = 0,
+  MQTTSN_KEEP_ALIVE_SEND_PINGREQ = 1
+} mqttsn_keep_alive_action_t;
+
+typedef struct {
+  uint64_t keep_alive_ms;
+  uint64_t deadline_ms;
+  uint8_t active;
+} mqttsn_keep_alive_timer_t;
+
+void mqttsn_keep_alive_timer_init(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t keep_alive_ms);
+
+void mqttsn_keep_alive_timer_start(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t now_ms);
+
+void mqttsn_keep_alive_timer_outbound_activity(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t now_ms);
+
+void mqttsn_keep_alive_timer_stop(
+    mqttsn_keep_alive_timer_t *timer);
+
+mqttsn_keep_alive_action_t mqttsn_keep_alive_timer_poll(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t now_ms);
+
 void mqttsn_client_retry_exhausted(mqttsn_client_t *client);
 
 #ifdef __cplusplus
