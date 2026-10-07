@@ -37,6 +37,7 @@
     <maven.source.version>3.3.1</maven.source.version>
     <maven.javadoc.version>3.11.2</maven.javadoc.version>
     <maven.deploy.version>3.1.4</maven.deploy.version>
+    <jacoco.version>0.8.14</jacoco.version>
   </properties>
 
   <modules>
@@ -58,6 +59,28 @@
   </distributionManagement>
 
   <build>
+    <plugins>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
     <pluginManagement>
       <plugins>
         <plugin>
