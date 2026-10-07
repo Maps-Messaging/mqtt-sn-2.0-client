@@ -104,3 +104,46 @@ mvn --batch-mode clean deploy -DskipTests
 which publishes `0.1.0-SNAPSHOT` to the standard MAPS `maps_snapshots`
 repository using the Maven configuration already present on the MAPS
 Buildkite Java agents.
+
+
+## UDP transport adapter
+
+The Java artifact includes `io.mapsmessaging.mqttsn.udp.UdpMqttSnClient`.
+
+UDP is deliberately an adapter over the transport-neutral protocol/session
+implementation. The core library still owns no socket.
+
+Example:
+
+```java
+var remote = new InetSocketAddress("127.0.0.1", 1884);
+
+try (var client = new UdpMqttSnClient(remote)) {
+  int packetId = client.session().nextPacketIdentifier();
+
+  byte[] connect = MqttSnCodec.encodeConnect(
+      new ConnectOptions(
+          true,
+          false,
+          false,
+          packetId,
+          60,
+          0,
+          "mqtt-sn-test"));
+
+  client.send(connect);
+
+  client.receive(
+      Duration.ofSeconds(5),
+      packet -> System.out.println(packet.type()));
+}
+```
+
+The adapter:
+
+- validates outbound state/flow before transmitting;
+- accepts one UDP datagram at a time;
+- supports multiple complete MQTT-SN packets within a datagram;
+- rejects an incomplete packet at a datagram boundary;
+- rejects datagrams from a peer other than the configured server;
+- performs no background retry, timer, or keep-alive scheduling.
