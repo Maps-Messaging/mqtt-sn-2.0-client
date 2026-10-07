@@ -531,6 +531,126 @@ mqttsn_status_t mqttsn_decode_sleepresp(
   return MQTTSN_OK;
 }
 
+
+mqttsn_status_t mqttsn_encode_disconnect(
+    const mqttsn_disconnect_options_t *options,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t fixed[8];
+  size_t fixed_length = 1u;
+  uint8_t flags = 0u;
+  mqttsn_buffer_t parts[2];
+  size_t part_count = 1u;
+
+  if (options == NULL || output == NULL || written == NULL ||
+      (options->reason_string == NULL && options->reason_string_length != 0u)) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+
+  if (options->has_packet_identifier) {
+    if (options->packet_identifier == 0u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    flags |= 0x01u;
+  }
+  if (options->has_session_expiry_interval) {
+    flags |= 0x02u;
+  }
+  if (options->has_reason_code) {
+    flags |= 0x04u;
+  }
+  if (!mqttsn_utf8_is_valid(options->reason_string, options->reason_string_length)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  fixed[0] = flags;
+  if (options->has_packet_identifier) {
+    write_u16_packet(fixed + fixed_length, options->packet_identifier);
+    fixed_length += 2u;
+  }
+  if (options->has_reason_code) {
+    fixed[fixed_length++] = options->reason_code;
+  }
+  if (options->has_session_expiry_interval) {
+    write_u32_packet(fixed + fixed_length, options->session_expiry_interval);
+    fixed_length += 4u;
+  }
+
+  parts[0] = (mqttsn_buffer_t){fixed, fixed_length};
+  if (options->reason_string_length != 0u) {
+    parts[1] = (mqttsn_buffer_t){
+        options->reason_string, options->reason_string_length};
+    part_count = 2u;
+  }
+
+  return mqttsn_encode_packetv(
+      MQTTSN_DISCONNECT, parts, part_count, output, output_capacity, written);
+}
+
+mqttsn_status_t mqttsn_decode_disconnect(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_disconnect_view_t *disconnect) {
+  const uint8_t *body;
+  size_t length;
+  size_t offset = 0u;
+  uint8_t flags;
+
+  if (packet == NULL || disconnect == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_DISCONNECT || packet->body_length < 1u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  memset(disconnect, 0, sizeof(*disconnect));
+  body = packet->body;
+  length = packet->body_length;
+  flags = body[offset++];
+
+  if ((flags & 0xF8u) != 0u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  if ((flags & 0x01u) != 0u) {
+    if (length - offset < 2u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    disconnect->has_packet_identifier = 1u;
+    disconnect->packet_identifier = read_u16_packet(body + offset);
+    if (disconnect->packet_identifier == 0u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    offset += 2u;
+  }
+
+  if ((flags & 0x04u) != 0u) {
+    if (length - offset < 1u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    disconnect->has_reason_code = 1u;
+    disconnect->reason_code = body[offset++];
+  }
+
+  if ((flags & 0x02u) != 0u) {
+    if (length - offset < 4u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    disconnect->has_session_expiry_interval = 1u;
+    disconnect->session_expiry_interval = read_u32_packet(body + offset);
+    offset += 4u;
+  }
+
+  disconnect->reason_string = body + offset;
+  disconnect->reason_string_length = length - offset;
+  if (!mqttsn_utf8_is_valid(
+          disconnect->reason_string, disconnect->reason_string_length)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  return MQTTSN_OK;
+}
+
 mqttsn_status_t mqttsn_encode_wakeup(
     uint8_t *output,
     size_t output_capacity,
