@@ -317,6 +317,8 @@ def decode_suback(packet: DecodedPacket) -> SubAck:
         raise MqttSnError("MALFORMED_PACKET", "SUBACK Topic Type must be an alias")
 
     packet_identifier = int.from_bytes(body[1:3], "big")
+    if packet_identifier == 0:
+        raise MqttSnError("MALFORMED_PACKET", "SUBACK Packet Identifier must be non-zero")
     offset = 3
     topic_alias: int | None = None
     if flags & 0x04:
