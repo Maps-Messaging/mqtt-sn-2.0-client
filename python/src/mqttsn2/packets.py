@@ -698,3 +698,91 @@ def decode_gwinfo(packet: DecodedPacket) -> GwInfoPacket:
     if packet.type is not PacketType.GWINFO or len(packet.body) < 1:
         raise MqttSnError("MALFORMED_PACKET", "Invalid GWINFO packet")
     return GwInfoPacket(packet.body[0], bytes(packet.body[1:]))
+
+
+@dataclass(frozen=True)
+class ConnectionEncapsulation:
+    client_identifier: str
+    mqttsn_packet: bytes
+
+    def __post_init__(self) -> None:
+        encoded = self.client_identifier.encode("utf-8")
+        _decode_utf8(encoded)
+        if len(encoded) > 0xFFFF:
+            raise ValueError("client_identifier exceeds 65535 UTF-8 bytes")
+
+
+@dataclass(frozen=True)
+class ForwarderEncapsulation:
+    client_addressing_information: bytes
+    mqttsn_packet: bytes
+
+    def __post_init__(self) -> None:
+        if len(self.client_addressing_information) > 0xFF:
+            raise ValueError("client_addressing_information exceeds 255 bytes")
+
+
+def _validate_single_inner_packet(data: bytes, connection_restricted: bool) -> None:
+    if not data:
+        raise MqttSnError("MALFORMED_PACKET", "Encapsulation must contain one MQTT-SN packet")
+    packet = decode_packet(data)
+    if packet.packet_length != len(data):
+        raise MqttSnError("MALFORMED_PACKET", "Encapsulation must contain exactly one MQTT-SN packet")
+    if connection_restricted and packet.type not in {
+        PacketType.PUBLISH,
+        PacketType.SUBSCRIBE,
+        PacketType.UNSUBSCRIBE,
+        PacketType.REGISTER,
+        PacketType.DISCONNECT,
+        PacketType.SLEEPREQ,
+        PacketType.PINGREQ,
+    }:
+        raise MqttSnError(
+            "MALFORMED_PACKET",
+            f"Connection Encapsulation is not allowed for {packet.type.name}",
+        )
+
+
+def encode_connection_encapsulation(encapsulation: ConnectionEncapsulation) -> bytes:
+    client_id = encapsulation.client_identifier.encode("utf-8")
+    _validate_single_inner_packet(encapsulation.mqttsn_packet, True)
+    body = (
+        len(client_id).to_bytes(2, "big")
+        + client_id
+        + encapsulation.mqttsn_packet
+    )
+    return encode_packet(PacketType.CONNECTION_ENCAPSULATION, body)
+
+
+def decode_connection_encapsulation(packet: DecodedPacket) -> ConnectionEncapsulation:
+    if packet.type is not PacketType.CONNECTION_ENCAPSULATION or len(packet.body) < 2:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid Connection Encapsulation")
+    client_id_length = int.from_bytes(packet.body[:2], "big")
+    if len(packet.body) < 2 + client_id_length:
+        raise MqttSnError("MALFORMED_PACKET", "Connection Client Identifier is truncated")
+    client_id = _decode_utf8(packet.body[2 : 2 + client_id_length])
+    inner = bytes(packet.body[2 + client_id_length :])
+    _validate_single_inner_packet(inner, True)
+    return ConnectionEncapsulation(client_id, inner)
+
+
+def encode_forwarder_encapsulation(encapsulation: ForwarderEncapsulation) -> bytes:
+    _validate_single_inner_packet(encapsulation.mqttsn_packet, False)
+    body = (
+        bytes([len(encapsulation.client_addressing_information)])
+        + encapsulation.client_addressing_information
+        + encapsulation.mqttsn_packet
+    )
+    return encode_packet(PacketType.FORWARDER_ENCAPSULATION, body)
+
+
+def decode_forwarder_encapsulation(packet: DecodedPacket) -> ForwarderEncapsulation:
+    if packet.type is not PacketType.FORWARDER_ENCAPSULATION or len(packet.body) < 1:
+        raise MqttSnError("MALFORMED_PACKET", "Invalid Forwarder Encapsulation")
+    addressing_length = packet.body[0]
+    if len(packet.body) < 1 + addressing_length:
+        raise MqttSnError("MALFORMED_PACKET", "Forwarder addressing information is truncated")
+    addressing = bytes(packet.body[1 : 1 + addressing_length])
+    inner = bytes(packet.body[1 + addressing_length :])
+    _validate_single_inner_packet(inner, False)
+    return ForwarderEncapsulation(addressing, inner)
