@@ -162,6 +162,30 @@ mqttsn_status_t mqttsn_decode_sleepresp(
     const mqttsn_packet_view_t *packet,
     mqttsn_sleepresp_view_t *sleepresp);
 
+
+typedef struct {
+  uint8_t has_packet_identifier;
+  uint16_t packet_identifier;
+  uint8_t has_reason_code;
+  uint8_t reason_code;
+  uint8_t has_session_expiry_interval;
+  uint32_t session_expiry_interval;
+  const uint8_t *reason_string;
+  size_t reason_string_length;
+} mqttsn_disconnect_options_t;
+
+typedef mqttsn_disconnect_options_t mqttsn_disconnect_view_t;
+
+mqttsn_status_t mqttsn_encode_disconnect(
+    const mqttsn_disconnect_options_t *options,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_disconnect(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_disconnect_view_t *disconnect);
+
 mqttsn_status_t mqttsn_encode_wakeup(
     uint8_t *output,
     size_t output_capacity,
