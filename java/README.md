@@ -80,3 +80,27 @@ META-INF/mqtt-sn-spec.properties
 ```
 
 This records the exact OASIS draft and source commit against which the client was built.
+
+
+## Buildkite
+
+The repository includes `.buildkite/pipeline.yaml` using the standard MAPS
+`java_build_queue_aws` queue.
+
+Branch and pull-request builds run:
+
+```bash
+mvn --batch-mode clean verify
+```
+
+and retain the Java JARs as Buildkite artifacts.
+
+The `main` branch additionally runs:
+
+```bash
+mvn --batch-mode clean deploy -DskipTests
+```
+
+which publishes `0.1.0-SNAPSHOT` to the standard MAPS `maps_snapshots`
+repository using the Maven configuration already present on the MAPS
+Buildkite Java agents.
