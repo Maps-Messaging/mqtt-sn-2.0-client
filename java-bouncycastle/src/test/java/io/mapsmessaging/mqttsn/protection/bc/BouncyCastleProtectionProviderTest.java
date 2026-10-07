@@ -4,7 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import io.mapsmessaging.mqttsn.MqttSnCodec;
 import io.mapsmessaging.mqttsn.protection.ProtectedContent;
+import io.mapsmessaging.mqttsn.protection.ProtectionCodec;
+import io.mapsmessaging.mqttsn.protection.ProtectionEnvelope;
 import io.mapsmessaging.mqttsn.protection.ProtectionContext;
 import java.util.HexFormat;
 import java.util.stream.Stream;
@@ -70,6 +73,34 @@ class BouncyCastleProtectionProviderTest {
     tag[0] ^= 0x01;
 
     assertNull(provider.unprotect(context, protectedContent.protectedPacket(), tag));
+  }
+
+
+  @ParameterizedTest
+  @MethodSource("schemeKeys")
+  void standardSchemesRoundTripThroughProtectionEnvelope(int scheme, String keyHex) {
+    byte[] key = HEX.parseHex(keyHex);
+    BouncyCastleProtectionProvider provider =
+        new BouncyCastleProtectionProvider(context -> key);
+    ProtectionEnvelope envelope = new ProtectionEnvelope(
+        scheme,
+        0x01,
+        HEX.parseHex("0102030405060708"),
+        HEX.parseHex("11121314"),
+        new byte[0],
+        new byte[0],
+        MqttSnCodec.encodePingReq(0x1234));
+
+    byte[] encoded = ProtectionCodec.encode(envelope, provider);
+    ProtectionEnvelope decoded = ProtectionCodec.decode(encoded, provider);
+
+    assertEquals(scheme, decoded.scheme());
+    assertArrayEquals(envelope.mqttSnPacket(), decoded.mqttSnPacket());
+  }
+
+  private static Stream<Arguments> schemeKeys() {
+    return vectors().map(arguments -> Arguments.of(
+        arguments.get()[0], arguments.get()[1]));
   }
 
   private static ProtectionContext context(int scheme, int tagLengthCode) {
