@@ -69,6 +69,70 @@ typedef struct {
   mqttsn_topic_ref_t topic;
 } mqttsn_unsubscribe_options_t;
 
+
+typedef struct {
+  uint8_t retain;
+  mqttsn_topic_ref_t topic;
+  const uint8_t *payload;
+  size_t payload_length;
+} mqttsn_pubwos_t;
+
+typedef struct {
+  uint8_t gateway_identifier;
+  uint16_t duration;
+} mqttsn_advertise_t;
+
+typedef struct {
+  const uint8_t *additional_network_information;
+  size_t additional_network_information_length;
+} mqttsn_searchgw_t;
+
+typedef struct {
+  uint8_t gateway_identifier;
+  const uint8_t *gateway_address;
+  size_t gateway_address_length;
+} mqttsn_gwinfo_t;
+
+mqttsn_status_t mqttsn_encode_pubwos(
+    const mqttsn_pubwos_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_pubwos(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_pubwos_t *pubwos);
+
+mqttsn_status_t mqttsn_encode_advertise(
+    const mqttsn_advertise_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_advertise(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_advertise_t *advertise);
+
+mqttsn_status_t mqttsn_encode_searchgw(
+    const mqttsn_searchgw_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_searchgw(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_searchgw_t *searchgw);
+
+mqttsn_status_t mqttsn_encode_gwinfo(
+    const mqttsn_gwinfo_t *packet,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_gwinfo(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_gwinfo_t *gwinfo);
+
 typedef struct {
   uint16_t packet_identifier;
   uint8_t reason_code;
