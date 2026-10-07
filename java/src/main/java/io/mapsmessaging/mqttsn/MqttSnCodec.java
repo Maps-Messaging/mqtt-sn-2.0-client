@@ -742,13 +742,50 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodeConnect(ConnectOptions options) {
+    return encodeConnect(options, null, null);
+  }
+
+  /**
+   * Encode CONNECT with an optional enhanced authentication method and initial
+   * authentication data.
+   *
+   * <p>MQTT-SN 2.0 CSD01 MQTT-SN-3.1.2.3-1/-2 and section 4.11.1.</p>
+   */
+  public static byte[] encodeConnect(
+      ConnectOptions options,
+      String authenticationMethod,
+      byte[] authenticationData) {
     Objects.requireNonNull(options, "options");
 
     byte[] clientIdentifier = options.clientIdentifier().getBytes(StandardCharsets.UTF_8);
-    ByteBuffer body = ByteBuffer.allocate(8 + clientIdentifier.length);
+    boolean authenticated = authenticationMethod != null;
+    byte[] method = new byte[0];
+    byte[] data = authenticationData == null ? new byte[0] : authenticationData.clone();
+
+    if (authenticated) {
+      MqttSnUtf8.validate(authenticationMethod);
+      method = authenticationMethod.getBytes(StandardCharsets.UTF_8);
+      if (method.length == 0 || method.length > 0xFF) {
+        throw new IllegalArgumentException(
+            "authenticationMethod must contain 1..255 UTF-8 bytes");
+      }
+      if (data.length > 0xFFFF) {
+        throw new IllegalArgumentException(
+            "authenticationData must contain at most 65535 bytes");
+      }
+    } else if (authenticationData != null && authenticationData.length != 0) {
+      throw new IllegalArgumentException(
+          "authenticationData requires an authenticationMethod");
+    }
+
+    int authLength = authenticated ? 1 + method.length + 2 + data.length : 0;
+    ByteBuffer body = ByteBuffer.allocate(8 + authLength + clientIdentifier.length);
     int flags = 0;
     if (options.cleanStart()) {
       flags |= 0x01;
+    }
+    if (authenticated) {
+      flags |= 0x04;
     }
     if (options.allowNetworkAddressChanges()) {
       flags |= 0x20;
@@ -762,8 +799,15 @@ public final class MqttSnCodec {
     body.put((byte) 0x02);
     body.putShort((short) options.keepAliveSeconds());
     body.putShort((short) options.maximumPacketSize());
-    body.put(clientIdentifier);
 
+    if (authenticated) {
+      body.put((byte) method.length);
+      body.put(method);
+      body.putShort((short) data.length);
+      body.put(data);
+    }
+
+    body.put(clientIdentifier);
     return encode(PacketType.CONNECT, body.array());
   }
 
