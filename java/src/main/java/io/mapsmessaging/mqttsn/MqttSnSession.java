@@ -302,43 +302,49 @@ public final class MqttSnSession {
   }
 
   private void trackInboundRequest(DecodedPacket packet) {
-    int packetIdentifier;
-    boolean request;
+    switch (packet.type()) {
+      case PUBLISH -> trackInboundPublish(packet);
+      case REGISTER -> registerInboundRequest(
+          packet,
+          readU16(packet.body(), 1, "REGISTER Packet Identifier"));
+      case PUBREL -> trackInboundPubRel(packet);
+      default -> {
+        // Not an inbound flow-controlled request handled by the client.
+      }
+    }
+  }
 
-    if (packet.type() == PacketType.PUBLISH) {
-      PublishPacket publish = MqttSnCodec.decodePublish(packet);
-      if (publish.qos() == QoS.AT_MOST_ONCE) {
-        return;
-      }
-      packetIdentifier = publish.packetIdentifier();
-      request = true;
-    } else if (packet.type() == PacketType.REGISTER) {
-      packetIdentifier = readU16(packet.body(), 1, "REGISTER Packet Identifier");
-      request = true;
-    } else if (packet.type() == PacketType.PUBREL) {
-      packetIdentifier = readU16(packet.body(), 0, "PUBREL Packet Identifier");
-      if (inboundRequestType != PacketType.PUBREL
-          || packetIdentifier != inboundPacketIdentifier) {
-        throw stateError("Unexpected PUBREL");
-      }
-      return;
-    } else {
+  private void trackInboundPublish(DecodedPacket packet) {
+    PublishPacket publish = MqttSnCodec.decodePublish(packet);
+    if (publish.qos() == QoS.AT_MOST_ONCE) {
       return;
     }
+    registerInboundRequest(packet, publish.packetIdentifier());
+  }
 
+  private void trackInboundPubRel(DecodedPacket packet) {
+    int packetIdentifier = readU16(packet.body(), 0, "PUBREL Packet Identifier");
+    requireNonZero(packetIdentifier, "PUBREL Packet Identifier");
+    if (inboundRequestType != PacketType.PUBREL
+        || packetIdentifier != inboundPacketIdentifier) {
+      throw stateError("Unexpected PUBREL");
+    }
+  }
+
+  private void registerInboundRequest(DecodedPacket packet, int packetIdentifier) {
     requireNonZero(packetIdentifier, packet.type() + " Packet Identifier");
 
     if (hasInboundRequest()) {
-      if (inboundRequestType == packet.type() && inboundPacketIdentifier == packetIdentifier) {
+      if (inboundRequestType == packet.type()
+          && inboundPacketIdentifier == packetIdentifier) {
         return; // retransmission
       }
-      throw flowError("Server sent a second flow-controlled request before acknowledgement");
+      throw flowError(
+          "Server sent a second flow-controlled request before acknowledgement");
     }
 
-    if (request) {
-      inboundRequestType = packet.type();
-      inboundPacketIdentifier = packetIdentifier;
-    }
+    inboundRequestType = packet.type();
+    inboundPacketIdentifier = packetIdentifier;
   }
 
   private int responsePacketIdentifier(DecodedPacket packet) {
