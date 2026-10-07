@@ -37,7 +37,9 @@ jobs:
           name: mqtt-sn-2-java-client
           path: |
             java/target/mqtt-sn-2-client-*.jar
+            java-bouncycastle/target/mqtt-sn-2-client-protection-bc-*.jar
             !java/target/original-*.jar
+            !java-bouncycastle/target/original-*.jar
 
   python:
     runs-on: ubuntu-latest
