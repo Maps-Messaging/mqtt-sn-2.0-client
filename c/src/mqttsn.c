@@ -315,7 +315,11 @@ mqttsn_status_t mqttsn_encode_connect(
 
   if (options == NULL || output == NULL || written == NULL ||
       (options->client_identifier == NULL &&
-       options->client_identifier_length != 0u)) {
+       options->client_identifier_length != 0u) ||
+      (options->authentication_method == NULL &&
+       options->authentication_method_length != 0u) ||
+      (options->authentication_data == NULL &&
+       options->authentication_data_length != 0u)) {
     return MQTTSN_INVALID_ARGUMENT;
   }
   *written = 0u;
@@ -332,11 +336,26 @@ mqttsn_status_t mqttsn_encode_connect(
     return MQTTSN_MALFORMED_PACKET;
   }
 
-  if (options->client_identifier_length > MQTTSN_MAX_PACKET_SIZE - 12u) {
+  if (options->authentication_method_length != 0u) {
+    if (options->authentication_method_length > 0xFFu ||
+        options->authentication_data_length > 0xFFFFu ||
+        !mqttsn_utf8_is_valid(
+            options->authentication_method,
+            options->authentication_method_length)) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+  } else if (options->authentication_data_length != 0u) {
     return MQTTSN_MALFORMED_PACKET;
   }
 
   body_length = 8u + options->client_identifier_length;
+  if (options->authentication_method_length != 0u) {
+    body_length += 1u + options->authentication_method_length
+        + 2u + options->authentication_data_length;
+  }
+  if (body_length > MQTTSN_MAX_PACKET_SIZE - 2u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
   header_length = body_length <= 253u ? 2u : 4u;
   packet_length = body_length + header_length;
   if (packet_length > MQTTSN_MAX_PACKET_SIZE) {
@@ -359,6 +378,9 @@ mqttsn_status_t mqttsn_encode_connect(
   if (options->clean_start) {
     flags |= 0x01u;
   }
+  if (options->authentication_method_length != 0u) {
+    flags |= 0x04u;
+  }
   if (options->allow_network_address_changes) {
     flags |= 0x20u;
   }
@@ -375,6 +397,24 @@ mqttsn_status_t mqttsn_encode_connect(
   offset += 2u;
   write_u16(output + offset, options->maximum_packet_size);
   offset += 2u;
+
+  if (options->authentication_method_length != 0u) {
+    output[offset++] = (uint8_t)options->authentication_method_length;
+    memcpy(
+        output + offset,
+        options->authentication_method,
+        options->authentication_method_length);
+    offset += options->authentication_method_length;
+    write_u16(output + offset, (uint16_t)options->authentication_data_length);
+    offset += 2u;
+    if (options->authentication_data_length != 0u) {
+      memcpy(
+          output + offset,
+          options->authentication_data,
+          options->authentication_data_length);
+      offset += options->authentication_data_length;
+    }
+  }
 
   if (options->client_identifier_length != 0u) {
     memcpy(
