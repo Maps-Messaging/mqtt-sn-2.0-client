@@ -117,4 +117,4 @@ python -m pytest
 
 ## Licence
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 with Commons Clause v1.0. See [LICENSE](LICENSE).

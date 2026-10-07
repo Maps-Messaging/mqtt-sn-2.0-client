@@ -15,8 +15,8 @@
 
   <licenses>
     <license>
-      <name>Apache License, Version 2.0</name>
-      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <name>Apache License 2.0 with Commons Clause</name>
+      <url>https://github.com/Maps-Messaging/mqtt-sn-2.0-client/blob/main/LICENSE</url>
       <distribution>repo</distribution>
     </license>
   </licenses>
