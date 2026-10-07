@@ -9,6 +9,8 @@
 
 extern "C" {
 #include "mqttsn/mqttsn.h"
+#include "mqttsn/packets.h"
+#include "mqttsn/client.h"
 }
 
 namespace mqttsn {
@@ -107,6 +109,65 @@ struct SearchGwPacket {
 struct GwInfoPacket {
   std::uint8_t gatewayIdentifier{};
   std::span<const std::uint8_t> gatewayAddress{};
+};
+
+
+enum class RetryAction {
+  None = MQTTSN_RETRY_NONE,
+  Retransmit = MQTTSN_RETRY_RETRANSMIT,
+  DeleteConnection = MQTTSN_RETRY_DELETE_CONNECTION
+};
+
+class RetryTimer {
+ public:
+  RetryTimer(std::uint64_t retryIntervalMs, std::uint32_t maximumRetryCount) {
+    mqttsn_retry_timer_init(&native_, retryIntervalMs, maximumRetryCount);
+    if (retryIntervalMs == 0u) {
+      throw std::invalid_argument("retryIntervalMs must be > 0");
+    }
+  }
+
+  void start(std::uint64_t nowMs) { mqttsn_retry_timer_start(&native_, nowMs); }
+  void cancel() { mqttsn_retry_timer_cancel(&native_); }
+  [[nodiscard]] bool active() const noexcept { return native_.active != 0; }
+  [[nodiscard]] std::uint32_t retriesSent() const noexcept { return native_.retries_sent; }
+
+  RetryAction poll(std::uint64_t nowMs) {
+    return static_cast<RetryAction>(mqttsn_retry_timer_poll(&native_, nowMs));
+  }
+
+ private:
+  mqttsn_retry_timer_t native_{};
+};
+
+enum class KeepAliveAction {
+  None = MQTTSN_KEEP_ALIVE_NONE,
+  SendPingReq = MQTTSN_KEEP_ALIVE_SEND_PINGREQ
+};
+
+class KeepAliveTimer {
+ public:
+  explicit KeepAliveTimer(std::uint64_t keepAliveMs) {
+    mqttsn_keep_alive_timer_init(&native_, keepAliveMs);
+    if (keepAliveMs == 0u) {
+      throw std::invalid_argument("keepAliveMs must be > 0");
+    }
+  }
+
+  void start(std::uint64_t nowMs) { mqttsn_keep_alive_timer_start(&native_, nowMs); }
+  void outboundActivity(std::uint64_t nowMs) {
+    mqttsn_keep_alive_timer_outbound_activity(&native_, nowMs);
+  }
+  void stop() { mqttsn_keep_alive_timer_stop(&native_); }
+  [[nodiscard]] bool active() const noexcept { return native_.active != 0; }
+
+  KeepAliveAction poll(std::uint64_t nowMs) {
+    return static_cast<KeepAliveAction>(
+        mqttsn_keep_alive_timer_poll(&native_, nowMs));
+  }
+
+ private:
+  mqttsn_keep_alive_timer_t native_{};
 };
 
 class Codec {
