@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record AuthPacket(
     int packetIdentifier,
     int reasonCode,
@@ -43,5 +46,29 @@ public record AuthPacket(
   @Override
   public byte[] authenticationData() {
     return authenticationData.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof AuthPacket packet
+        && packetIdentifier == packet.packetIdentifier
+        && reasonCode == packet.reasonCode
+        && Objects.equals(authenticationMethod, packet.authenticationMethod)
+        && Arrays.equals(authenticationData, packet.authenticationData);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Objects.hash(packetIdentifier, reasonCode, authenticationMethod)
+        + Arrays.hashCode(authenticationData);
+  }
+
+  @Override
+  public String toString() {
+    return "AuthPacket[packetIdentifier=" + packetIdentifier
+        + ", reasonCode=" + reasonCode
+        + ", authenticationMethod=" + authenticationMethod
+        + ", authenticationData=" + Arrays.toString(authenticationData) + "]";
   }
 }
