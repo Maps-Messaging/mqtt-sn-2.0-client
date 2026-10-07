@@ -22,6 +22,12 @@ add_executable(mqttsn2_cpp_test
 target_link_libraries(mqttsn2_cpp_test PRIVATE mqttsn2_cpp)
 add_test(NAME mqttsn2_cpp_test COMMAND mqttsn2_cpp_test)
 
+add_executable(mqttsn2_cpp_auth_test
+    test/test_auth.cpp
+)
+target_link_libraries(mqttsn2_cpp_auth_test PRIVATE mqttsn2_cpp)
+add_test(NAME mqttsn2_cpp_auth_test COMMAND mqttsn2_cpp_auth_test)
+
 if(TARGET mqttsn2_openssl)
     add_library(mqttsn2_cpp_openssl INTERFACE)
     target_include_directories(mqttsn2_cpp_openssl
