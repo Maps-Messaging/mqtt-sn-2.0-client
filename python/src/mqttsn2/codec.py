@@ -212,6 +212,8 @@ def decode_connack(packet: DecodedPacket) -> ConnAck:
 
     session_present = bool(flags & 0x01)
     packet_identifier = int.from_bytes(body[1:3], "big")
+    if packet_identifier == 0:
+        raise MqttSnError("MALFORMED_PACKET", "CONNACK Packet Identifier must be non-zero")
     reason_code = body[3]
     if session_present and reason_code != 0:
         raise MqttSnError(
