@@ -21,3 +21,32 @@ add_executable(mqttsn2_cpp_test
 )
 target_link_libraries(mqttsn2_cpp_test PRIVATE mqttsn2_cpp)
 add_test(NAME mqttsn2_cpp_test COMMAND mqttsn2_cpp_test)
+
+if(TARGET mqttsn2_openssl)
+    add_library(mqttsn2_cpp_openssl INTERFACE)
+    target_include_directories(mqttsn2_cpp_openssl
+        INTERFACE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(
+        mqttsn2_cpp_openssl
+        INTERFACE
+            mqttsn2_cpp
+            mqttsn2_openssl
+    )
+    target_compile_features(mqttsn2_cpp_openssl INTERFACE cxx_std_20)
+
+    add_executable(
+        mqttsn2_cpp_openssl_test
+        test/test_openssl_provider.cpp
+    )
+    target_link_libraries(
+        mqttsn2_cpp_openssl_test
+        PRIVATE
+            mqttsn2_cpp_openssl
+    )
+    add_test(
+        NAME mqttsn2_cpp_openssl_test
+        COMMAND mqttsn2_cpp_openssl_test
+    )
+endif()
