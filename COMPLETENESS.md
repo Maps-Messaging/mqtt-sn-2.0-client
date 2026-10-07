@@ -53,7 +53,7 @@ Legend:
 | Retry timer/backoff scheduler | Caller-driven timer | Wrapped | Caller-driven timer | Caller-driven timer | Shared C |
 | Keep-alive timer scheduler | Caller-driven timer | Wrapped | Caller-driven timer | Caller-driven timer | Shared C |
 | Session persistence | Missing | Missing | Missing | Missing | Missing |
-| Authentication exchange state | Partial/generic | Missing | Missing | Missing | Partial/generic |
+| Authentication exchange state | Implemented | Wrapped | Implemented + SASL adapter | Implemented | Shared C |
 | Protection cryptography | Optional OpenSSL provider | Wrapped OpenSSL provider | Optional Bouncy Castle provider | Optional pyca/cryptography provider | Provider ABI only |
 | Gateway discovery behaviour | Codec foundation | Wrapped | Codec foundation | Codec foundation | Shared C |
 
@@ -115,7 +115,7 @@ At minimum, the following remain required:
 1. typed codecs for every remaining control packet applicable to that client;
 2. full behavioural parity and integration coverage for the state/flow controllers;
 3. integration of caller-driven retry/keep-alive timers into higher-level client workflows;
-4. complete AUTH exchange semantics and applicable reason-code validation;
+4. finish any remaining AUTH reason-code applicability cases in the normative requirement matrix;
 5. complete applicable reason-code and session-expiry validation for DISCONNECT;
 6. higher-level gateway discovery behaviour where required by the test client;
 7. board-specific embedded Protection Providers where required;
