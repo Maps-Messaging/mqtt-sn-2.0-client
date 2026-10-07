@@ -1,5 +1,6 @@
 #include "mqttsn/mqttsn.h"
 #include "mqttsn/packets.h"
+#include "mqttsn/protection.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -859,6 +860,221 @@ static void test_connection_and_forwarder_encapsulation(void) {
   }
 }
 
+
+static int protection_supports(void *user_data, uint8_t scheme) {
+  (void)user_data;
+  return scheme == 0x3Cu || scheme == 0x40u;
+}
+
+static int protection_auth_only(void *user_data, uint8_t scheme) {
+  (void)user_data;
+  return scheme == 0x3Cu;
+}
+
+static size_t protection_tag_length(
+    void *user_data,
+    uint8_t scheme,
+    uint8_t tag_code) {
+  (void)user_data;
+  if (tag_code == 0u) {
+    return 6u;
+  }
+  if (tag_code == 1u) {
+    return scheme == 0x40u ? 8u : 16u;
+  }
+  if (tag_code >= 4u) {
+    return (size_t)tag_code * 2u;
+  }
+  return 0u;
+}
+
+static size_t protection_packet_length(
+    void *user_data,
+    uint8_t scheme,
+    size_t mqttsn_packet_length) {
+  (void)user_data;
+  (void)scheme;
+  return mqttsn_packet_length;
+}
+
+static mqttsn_status_t protection_protect(
+    void *user_data,
+    const mqttsn_protection_context_t *context,
+    const uint8_t *mqttsn_packet,
+    size_t mqttsn_packet_length,
+    uint8_t *protected_packet,
+    size_t protected_packet_capacity,
+    size_t *protected_packet_written,
+    uint8_t *authentication_tag,
+    size_t authentication_tag_capacity,
+    size_t *authentication_tag_written) {
+  size_t tag_length;
+  uint8_t tag_value;
+
+  (void)user_data;
+  if (context == NULL || mqttsn_packet == NULL ||
+      protected_packet == NULL || protected_packet_written == NULL ||
+      authentication_tag == NULL || authentication_tag_written == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+
+  tag_length = protection_tag_length(
+      NULL, context->scheme, context->tag_length_code);
+  if (protected_packet_capacity < mqttsn_packet_length ||
+      authentication_tag_capacity < tag_length) {
+    return MQTTSN_BUFFER_TOO_SMALL;
+  }
+
+  memcpy(protected_packet, mqttsn_packet, mqttsn_packet_length);
+  tag_value = (uint8_t)context->authenticated_prefix_length;
+  memset(authentication_tag, tag_value, tag_length);
+  *protected_packet_written = mqttsn_packet_length;
+  *authentication_tag_written = tag_length;
+  return MQTTSN_OK;
+}
+
+static mqttsn_status_t protection_unprotect(
+    void *user_data,
+    const mqttsn_protection_context_t *context,
+    const uint8_t *protected_packet,
+    size_t protected_packet_length,
+    const uint8_t *authentication_tag,
+    size_t authentication_tag_length,
+    uint8_t *mqttsn_packet,
+    size_t mqttsn_packet_capacity,
+    size_t *mqttsn_packet_written) {
+  size_t i;
+  uint8_t expected;
+
+  (void)user_data;
+  if (context == NULL || protected_packet == NULL ||
+      authentication_tag == NULL || mqttsn_packet == NULL ||
+      mqttsn_packet_written == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (mqttsn_packet_capacity < protected_packet_length) {
+    return MQTTSN_BUFFER_TOO_SMALL;
+  }
+
+  expected = (uint8_t)context->authenticated_prefix_length;
+  for (i = 0u; i < authentication_tag_length; i++) {
+    if (authentication_tag[i] != expected) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+  }
+
+  memcpy(mqttsn_packet, protected_packet, protected_packet_length);
+  *mqttsn_packet_written = protected_packet_length;
+  return MQTTSN_OK;
+}
+
+static mqttsn_protection_provider_t test_protection_provider(void) {
+  mqttsn_protection_provider_t provider = {
+      .user_data = NULL,
+      .supports = protection_supports,
+      .authentication_only = protection_auth_only,
+      .authentication_tag_length = protection_tag_length,
+      .protected_packet_length = protection_packet_length,
+      .protect = protection_protect,
+      .unprotect = protection_unprotect
+  };
+  return provider;
+}
+
+static void test_protection_envelope(void) {
+  const uint8_t sender_id[8] = {1,2,3,4,5,6,7,8};
+  const uint8_t random[4] = {9,10,11,12};
+  const uint8_t crypto[2] = {0x21, 0x22};
+  const uint8_t counter[2] = {0x00, 0x01};
+  const uint8_t inner[] = {0x04, MQTTSN_PINGREQ, 0x12, 0x34};
+  mqttsn_protection_provider_t provider = test_protection_provider();
+  mqttsn_protection_envelope_t envelope = {
+      .scheme = 0x3Cu,
+      .tag_length_code = 0x04u,
+      .sender_identifier = sender_id,
+      .sender_identifier_length = sizeof(sender_id),
+      .random = random,
+      .random_length = sizeof(random),
+      .cryptographic_material = crypto,
+      .cryptographic_material_length = sizeof(crypto),
+      .monotonic_counter = counter,
+      .monotonic_counter_length = sizeof(counter),
+      .mqttsn_packet = inner,
+      .mqttsn_packet_length = sizeof(inner)
+  };
+  uint8_t encoded[128];
+  size_t encoded_length = 0u;
+  uint8_t decoded_inner[64];
+  size_t decoded_inner_length = 0u;
+  mqttsn_protection_envelope_t decoded;
+
+  assert(mqttsn_encode_protection(
+      &envelope, &provider,
+      encoded, sizeof(encoded), &encoded_length) == MQTTSN_OK);
+
+  assert(mqttsn_decode_protection(
+      encoded, encoded_length, &provider,
+      decoded_inner, sizeof(decoded_inner), &decoded_inner_length,
+      &decoded) == MQTTSN_OK);
+
+  assert(decoded.scheme == 0x3Cu);
+  assert(decoded.tag_length_code == 0x04u);
+  assert(decoded.sender_identifier_length == 8u);
+  assert(decoded.random_length == 4u);
+  assert(decoded.cryptographic_material_length == 2u);
+  assert(decoded.monotonic_counter_length == 2u);
+  assert(decoded_inner_length == sizeof(inner));
+  assert(memcmp(decoded_inner, inner, sizeof(inner)) == 0);
+
+  encoded[encoded_length - 1u] ^= 0x01u;
+  assert(mqttsn_decode_protection(
+      encoded, encoded_length, &provider,
+      decoded_inner, sizeof(decoded_inner), &decoded_inner_length,
+      &decoded) == MQTTSN_MALFORMED_PACKET);
+}
+
+static void test_protection_rejects_forwarder_and_bad_tag_rules(void) {
+  const uint8_t sender_id[8] = {0};
+  const uint8_t random[4] = {0};
+  const uint8_t forwarder[] = {
+      0x07, MQTTSN_FORWARDER_ENCAPSULATION,
+      0x01, 0x55,
+      0x03, MQTTSN_DISCONNECT, 0x00
+  };
+  mqttsn_protection_provider_t provider = test_protection_provider();
+  mqttsn_protection_envelope_t envelope = {
+      .scheme = 0x3Cu,
+      .tag_length_code = 0x04u,
+      .sender_identifier = sender_id,
+      .sender_identifier_length = sizeof(sender_id),
+      .random = random,
+      .random_length = sizeof(random),
+      .cryptographic_material = NULL,
+      .cryptographic_material_length = 0u,
+      .monotonic_counter = NULL,
+      .monotonic_counter_length = 0u,
+      .mqttsn_packet = forwarder,
+      .mqttsn_packet_length = sizeof(forwarder)
+  };
+  uint8_t output[128];
+  size_t written = 0u;
+
+  assert(mqttsn_encode_protection(
+      &envelope, &provider,
+      output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+
+  envelope.scheme = 0x40u;
+  envelope.tag_length_code = 0x04u;
+  {
+    const uint8_t ping[] = {0x04, MQTTSN_PINGREQ, 0x00, 0x01};
+    envelope.mqttsn_packet = ping;
+    envelope.mqttsn_packet_length = sizeof(ping);
+    assert(mqttsn_encode_protection(
+        &envelope, &provider,
+        output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+  }
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -884,5 +1100,7 @@ int main(void) {
   test_auth_codec();
   test_pubwos_and_gateway_discovery();
   test_connection_and_forwarder_encapsulation();
+  test_protection_envelope();
+  test_protection_rejects_forwarder_and_bad_tag_rules();
   return 0;
 }
