@@ -22,7 +22,7 @@ Legend:
 | Topic name/filter validation | Typed | Wrapped indirectly | Typed | Typed | Shared C |
 | CONNECT | Typed encode | Wrapped | Typed encode | Typed encode | Shared C |
 | CONNACK | Typed decode | Wrapped | Typed decode | Typed decode | Shared C |
-| AUTH | Typed | Generic | Typed | Typed | Shared C |
+| AUTH | Typed | Wrapped | Typed | Typed | Shared C |
 | REGISTER | Typed client encode | Generic | Typed client encode | Typed client encode | Shared C |
 | REGACK | Generic | Generic | Generic | Generic | Shared C |
 | PUBLISH | Typed encode/decode | Generic | Typed encode/decode | Typed encode/decode | Shared C |
@@ -33,27 +33,27 @@ Legend:
 | UNSUBACK | Typed common ack | Generic | Typed common ack | Typed common ack | Shared C |
 | PINGREQ | Typed encode | Generic | Typed encode | Typed encode | Shared C |
 | PINGRESP | Typed decode | Generic | Typed decode | Typed decode | Shared C |
-| DISCONNECT | Typed | Generic | Typed | Typed | Shared C |
+| DISCONNECT | Typed | Wrapped | Typed | Typed | Shared C |
 | SLEEPREQ | Typed encode | Generic | Typed encode | Typed encode | Shared C |
 | SLEEPRESP | Typed decode | Generic | Typed decode | Typed decode | Shared C |
 | WAKEUP | Typed encode | Generic | Typed encode | Typed encode | Shared C |
-| PUBWOS | Generic | Generic | Generic | Generic | Shared C |
-| ADVERTISE | Generic | Generic | Generic | Generic | Shared C |
-| SEARCHGW | Generic | Generic | Generic | Generic | Shared C |
-| GWINFO | Generic | Generic | Generic | Generic | Shared C |
-| Forwarder Encapsulation | Generic | Generic | Generic | Generic | Shared C |
-| Connection Encapsulation | Generic | Generic | Generic | Generic | Shared C |
+| PUBWOS | Typed | Wrapped | Typed | Typed | Shared C |
+| ADVERTISE | Typed | Wrapped | Typed | Typed | Shared C |
+| SEARCHGW | Typed | Wrapped | Typed | Typed | Shared C |
+| GWINFO | Typed | Wrapped | Typed | Typed | Shared C |
+| Forwarder Encapsulation | Typed | Wrapped | Typed | Typed | Shared C |
+| Connection Encapsulation | Typed | Wrapped | Typed | Typed | Shared C |
 | Protection Encapsulation | Generic | Generic | Generic | Generic | Shared C |
-| Client state transitions | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
-| One-outstanding-request flow control | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
-| Packet-id allocation | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
-| Retry exhaustion state handling | Implemented foundation | Missing wrapper | Implemented foundation | Missing | Shared C |
-| Retry timer/backoff scheduler | Missing | Missing | Missing | Missing | Missing |
-| Keep-alive timer scheduler | Missing | Missing | Missing | Missing | Missing |
+| Client state transitions | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
+| One-outstanding-request flow control | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
+| Packet-id allocation | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
+| Retry exhaustion state handling | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
+| Retry timer/backoff scheduler | Caller-driven timer | Wrapped | Caller-driven timer | Caller-driven timer | Shared C |
+| Keep-alive timer scheduler | Caller-driven timer | Wrapped | Caller-driven timer | Caller-driven timer | Shared C |
 | Session persistence | Missing | Missing | Missing | Missing | Missing |
 | Authentication exchange state | Partial/generic | Missing | Missing | Missing | Partial/generic |
 | Protection cryptography | Missing | Missing | Missing | Missing | Missing |
-| Gateway discovery behaviour | Missing | Missing | Missing | Missing | Missing |
+| Gateway discovery behaviour | Codec foundation | Wrapped | Codec foundation | Codec foundation | Shared C |
 
 ## Test coverage structure
 
@@ -76,7 +76,9 @@ verify wrapper wire results, boundary handling, error propagation, and delegatio
 
 ### Java
 
-The Java artifact also includes a UDP adapter over the transport-neutral session/controller.\n\nJUnit tests cover:
+The Java artifact also includes a UDP adapter over the transport-neutral session/controller.
+
+JUnit tests cover:
 
 - every defined and representative reserved packet type;
 - short/extended/max packet framing boundaries;
@@ -93,7 +95,8 @@ The Java artifact also includes a UDP adapter over the transport-neutral session
 ### Python
 
 Pytest mirrors the Java/C wire-level boundary, malformed-input, topic, QoS, acknowledgement,
-PING and SLEEP cases.
+PING, SLEEP, AUTH, DISCONNECT, PUBWOS, gateway discovery, encapsulation, timers and
+client state/flow cases.
 
 ### Arduino
 
@@ -106,12 +109,12 @@ into an Arduino-specific test implementation.
 At minimum, the following remain required:
 
 1. typed codecs for every remaining control packet applicable to that client;
-2. client state/flow controller in Python and a C++ wrapper for the C controller;
-3. retry, keep-alive and sleep timers driven by caller-supplied time rather than transport code;
-4. AUTH packet codecs and authentication exchange state;
-5. DISCONNECT typed codec and reason/session-expiry handling;
-6. PUBWOS and gateway discovery codecs/behaviour;
-7. Connection, Forwarder and Protection Encapsulation;
+2. full behavioural parity and integration coverage for the state/flow controllers;
+3. integration of caller-driven retry/keep-alive timers into higher-level client workflows;
+4. complete AUTH exchange semantics and applicable reason-code validation;
+5. complete applicable reason-code and session-expiry validation for DISCONNECT;
+6. higher-level gateway discovery behaviour where required by the test client;
+7. Protection Encapsulation envelope and cryptographic schemes;
 8. protection scheme implementation/tests where required for claimed conformance;
 9. requirement-by-requirement traceability in `shared/requirements.json`;
 10. integration/conformance tests runnable against MapsMessaging without MapsMessaging-specific expected behaviour.
