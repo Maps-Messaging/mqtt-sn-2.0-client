@@ -4,7 +4,9 @@ steps:
     checkout:
       ssh_secret: "GITHUB_SSH_KEY"
     commands:
+      - "export SONAR_TOKEN=$(buildkite-agent secret get SONAR_TOKEN)"
       - "mvn --batch-mode clean verify"
+      - "mvn --batch-mode org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar -Dsonar.token=${SONAR_TOKEN} -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=maps-messaging -Dsonar.projectKey=Maps-Messaging_mqtt-sn-2.0-client"
     artifact_paths:
       - "java/target/mqtt-sn-2-client-*.jar"
       - "java-bouncycastle/target/mqtt-sn-2-client-protection-bc-*.jar"
