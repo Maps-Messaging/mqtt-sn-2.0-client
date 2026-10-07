@@ -29,7 +29,7 @@ from mqttsn2 import (
 )
 
 
-class TestMechanism:
+class MechanismStub:
     method = "TEST"
 
     def __init__(self) -> None:
@@ -75,7 +75,7 @@ def test_authenticated_connect_wire_shape() -> None:
 
 
 def test_generic_authentication_exchange_and_reauthentication() -> None:
-    mechanism = TestMechanism()
+    mechanism = MechanismStub()
     exchange = AuthenticationExchange(mechanism)
 
     assert exchange.initial_response() == b"\x01"
@@ -110,7 +110,7 @@ def test_generic_authentication_exchange_and_reauthentication() -> None:
 
 
 def test_method_change_is_rejected() -> None:
-    exchange = AuthenticationExchange(TestMechanism())
+    exchange = AuthenticationExchange(MechanismStub())
     exchange.initial_response()
 
     with pytest.raises(MqttSnError) as error:
