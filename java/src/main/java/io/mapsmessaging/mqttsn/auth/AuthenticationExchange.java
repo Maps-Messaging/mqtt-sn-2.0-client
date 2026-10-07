@@ -22,7 +22,6 @@ import io.mapsmessaging.mqttsn.AuthPacket;
 import io.mapsmessaging.mqttsn.ConnAck;
 import io.mapsmessaging.mqttsn.MqttSnError;
 import io.mapsmessaging.mqttsn.MqttSnException;
-import java.util.Arrays;
 import java.util.Objects;
 
 public final class AuthenticationExchange implements AutoCloseable {
@@ -45,6 +44,7 @@ public final class AuthenticationExchange implements AutoCloseable {
   }
 
   public byte[] initialResponse() {
+    mechanism.reset();
     active = true;
     byte[] response = mechanism.initialResponse();
     return response == null ? new byte[0] : response.clone();
@@ -81,7 +81,7 @@ public final class AuthenticationExchange implements AutoCloseable {
         throw state("Successful CONNACK must retain the Authentication Method");
       }
       byte[] finalData = connAck.authenticationData();
-      if (finalData != null && finalData.length != 0 && !mechanism.complete()) {
+      if (finalData != null && finalData.length != 0) {
         mechanism.evaluateChallenge(finalData);
       }
       if (!mechanism.complete()) {
