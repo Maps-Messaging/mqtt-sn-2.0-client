@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 static mqttsn_status_t count_packet(void *context, const mqttsn_packet_view_t *packet) {
@@ -378,6 +379,200 @@ static void test_sleep_codec(void) {
   assert(sleepresp.reason_code == 0u);
 }
 
+
+static void test_length_boundaries_and_maximum_packet(void) {
+  uint8_t short_body[253];
+  uint8_t extended_body[254];
+  uint8_t maximum_body[MQTTSN_MAX_PACKET_SIZE - 4u];
+  uint8_t short_packet[255];
+  uint8_t extended_packet[258];
+  uint8_t *maximum_packet;
+  mqttsn_packet_view_t view;
+  size_t written = 0u;
+  size_t consumed = 0u;
+
+  memset(short_body, 0, sizeof(short_body));
+  memset(extended_body, 0, sizeof(extended_body));
+  memset(maximum_body, 0, sizeof(maximum_body));
+
+  assert(mqttsn_encode_packet(
+      MQTTSN_PUBLISH, short_body, sizeof(short_body),
+      short_packet, sizeof(short_packet), &written) == MQTTSN_OK);
+  assert(written == 255u);
+  assert(short_packet[0] == 255u);
+  assert(mqttsn_decode_packet(
+      short_packet, written, &view, &consumed) == MQTTSN_OK);
+  assert(view.header_length == 2u);
+
+  assert(mqttsn_encode_packet(
+      MQTTSN_PUBLISH, extended_body, sizeof(extended_body),
+      extended_packet, sizeof(extended_packet), &written) == MQTTSN_OK);
+  assert(written == 258u);
+  assert(extended_packet[0] == 0x01u);
+  assert(extended_packet[1] == 0x01u);
+  assert(extended_packet[2] == 0x02u);
+  assert(view.header_length == 2u || view.header_length == 4u);
+
+  maximum_packet = (uint8_t *)malloc(MQTTSN_MAX_PACKET_SIZE);
+  assert(maximum_packet != NULL);
+  assert(mqttsn_encode_packet(
+      MQTTSN_PUBLISH, maximum_body, sizeof(maximum_body),
+      maximum_packet, MQTTSN_MAX_PACKET_SIZE, &written) == MQTTSN_OK);
+  assert(written == MQTTSN_MAX_PACKET_SIZE);
+  assert(mqttsn_decode_packet(
+      maximum_packet, written, &view, &consumed) == MQTTSN_OK);
+  assert(view.packet_length == MQTTSN_MAX_PACKET_SIZE);
+  free(maximum_packet);
+}
+
+static void test_malformed_length_headers(void) {
+  const uint8_t zero_length[] = {0x00};
+  const uint8_t extended_one[] = {0x01};
+  const uint8_t extended_two[] = {0x01, 0x00};
+  const uint8_t extended_no_type[] = {0x01, 0x00, 0x04};
+  const uint8_t extended_too_small[] = {0x01, 0x00, 0x03, MQTTSN_PINGREQ};
+  mqttsn_packet_view_t view;
+  size_t consumed = 0u;
+
+  assert(mqttsn_decode_packet(
+      zero_length, sizeof(zero_length), &view, &consumed) == MQTTSN_MALFORMED_PACKET);
+  assert(mqttsn_decode_packet(
+      extended_one, sizeof(extended_one), &view, &consumed) == MQTTSN_NEED_MORE);
+  assert(mqttsn_decode_packet(
+      extended_two, sizeof(extended_two), &view, &consumed) == MQTTSN_NEED_MORE);
+  assert(mqttsn_decode_packet(
+      extended_no_type, sizeof(extended_no_type), &view, &consumed) == MQTTSN_NEED_MORE);
+  assert(mqttsn_decode_packet(
+      extended_too_small, sizeof(extended_too_small), &view, &consumed) == MQTTSN_MALFORMED_PACKET);
+}
+
+static void test_connack_optional_fields_and_zero_identifier(void) {
+  const uint8_t auth_connack[] = {
+      0x12, MQTTSN_CONNACK,
+      0x08,
+      0x12, 0x34,
+      0x00,
+      0x03, 'p', 's', 'k',
+      0x00, 0x02, 0x01, 0x02,
+      'i', 'd', '4', '2'
+  };
+  const uint8_t zero_identifier[] = {
+      0x06, MQTTSN_CONNACK, 0x00, 0x00, 0x00, 0x00
+  };
+  mqttsn_packet_view_t packet;
+  mqttsn_connack_view_t connack;
+  size_t consumed = 0u;
+
+  assert(mqttsn_decode_packet(
+      auth_connack, sizeof(auth_connack), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_connack(&packet, &connack) == MQTTSN_OK);
+  assert(connack.has_authentication == 1u);
+  assert(connack.authentication_method_length == 3u);
+  assert(memcmp(connack.authentication_method, "psk", 3u) == 0);
+  assert(connack.authentication_data_length == 2u);
+  assert(connack.authentication_data[0] == 0x01u);
+  assert(connack.authentication_data[1] == 0x02u);
+  assert(connack.assigned_client_identifier_length == 4u);
+  assert(memcmp(connack.assigned_client_identifier, "id42", 4u) == 0);
+
+  assert(mqttsn_decode_packet(
+      zero_identifier, sizeof(zero_identifier), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_connack(&packet, &connack) == MQTTSN_MALFORMED_PACKET);
+}
+
+static void test_publish_qos_and_alias_variants(void) {
+  const uint8_t payload[] = {0x01, 0x02};
+  mqttsn_publish_options_t options = {
+      .qos = MQTTSN_QOS_1,
+      .duplicate = 0u,
+      .retain = 1u,
+      .packet_identifier = 0x1234u,
+      .topic = {
+          .type = MQTTSN_TOPIC_SESSION_ALIAS,
+          .alias = 42u,
+          .name = NULL,
+          .name_length = 0u
+      },
+      .payload = payload,
+      .payload_length = sizeof(payload)
+  };
+  uint8_t output[32];
+  size_t written = 0u;
+  size_t consumed = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_publish_view_t publish;
+
+  assert(mqttsn_encode_publish(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(mqttsn_decode_packet(
+      output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_publish(&packet, &publish) == MQTTSN_OK);
+  assert(publish.qos == MQTTSN_QOS_1);
+  assert(publish.packet_identifier == 0x1234u);
+  assert(publish.topic.type == MQTTSN_TOPIC_SESSION_ALIAS);
+  assert(publish.topic.alias == 42u);
+  assert(publish.retain == 1u);
+
+  options.qos = MQTTSN_QOS_2;
+  options.duplicate = 1u;
+  options.retain = 0u;
+  options.packet_identifier = 0xFFFFu;
+  options.topic.type = MQTTSN_TOPIC_PREDEFINED_ALIAS;
+  options.topic.alias = 7u;
+  assert(mqttsn_encode_publish(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(mqttsn_decode_packet(
+      output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_publish(&packet, &publish) == MQTTSN_OK);
+  assert(publish.qos == MQTTSN_QOS_2);
+  assert(publish.duplicate == 1u);
+  assert(publish.topic.alias == 7u);
+}
+
+static void test_suback_zero_identifier_is_rejected(void) {
+  const uint8_t suback[] = {
+      0x05, MQTTSN_SUBACK, 0x00, 0x00, 0x00
+  };
+  mqttsn_packet_view_t packet;
+  mqttsn_suback_view_t view;
+  size_t consumed = 0u;
+
+  assert(mqttsn_decode_packet(
+      suback, sizeof(suback), &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_suback(&packet, &view) == MQTTSN_MALFORMED_PACKET);
+}
+
+static void test_ack_types_and_wakeup(void) {
+  const mqttsn_packet_type_t ack_types[] = {
+      MQTTSN_PUBACK, MQTTSN_PUBREC, MQTTSN_PUBREL,
+      MQTTSN_PUBCOMP, MQTTSN_UNSUBACK
+  };
+  uint8_t output[16];
+  size_t written = 0u;
+  size_t consumed = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_ack_view_t ack;
+  size_t i;
+
+  for (i = 0u; i < sizeof(ack_types) / sizeof(ack_types[0]); i++) {
+    assert(mqttsn_encode_ack(
+        ack_types[i], 0x1234u, 1u, 0x80u,
+        output, sizeof(output), &written) == MQTTSN_OK);
+    assert(mqttsn_decode_packet(
+        output, written, &packet, &consumed) == MQTTSN_OK);
+    assert(mqttsn_decode_ack(&packet, &ack) == MQTTSN_OK);
+    assert(ack.packet_identifier == 0x1234u);
+    assert(ack.has_reason_code == 1u);
+    assert(ack.reason_code == 0x80u);
+  }
+
+  assert(mqttsn_encode_wakeup(
+      output, sizeof(output), &written) == MQTTSN_OK);
+  assert(written == 2u);
+  assert(output[0] == 0x02u);
+  assert(output[1] == MQTTSN_WAKEUP);
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -393,5 +588,11 @@ int main(void) {
   test_subscribe_and_suback();
   test_ping_and_ack();
   test_sleep_codec();
+  test_length_boundaries_and_maximum_packet();
+  test_malformed_length_headers();
+  test_connack_optional_fields_and_zero_identifier();
+  test_publish_qos_and_alias_variants();
+  test_suback_zero_identifier_is_rejected();
+  test_ack_types_and_wakeup();
   return 0;
 }
