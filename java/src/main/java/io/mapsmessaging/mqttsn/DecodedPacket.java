@@ -11,4 +11,9 @@ public record DecodedPacket(
   public DecodedPacket {
     body = body.asReadOnlyBuffer();
   }
+
+  @Override
+  public ByteBuffer body() {
+    return body.asReadOnlyBuffer();
+  }
 }
