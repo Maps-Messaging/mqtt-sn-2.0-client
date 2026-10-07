@@ -163,6 +163,26 @@ mqttsn_status_t mqttsn_decode_sleepresp(
     mqttsn_sleepresp_view_t *sleepresp);
 
 
+
+typedef struct {
+  uint16_t packet_identifier;
+  uint8_t reason_code;
+  const uint8_t *authentication_method;
+  size_t authentication_method_length;
+  const uint8_t *authentication_data;
+  size_t authentication_data_length;
+} mqttsn_auth_t;
+
+mqttsn_status_t mqttsn_encode_auth(
+    const mqttsn_auth_t *auth,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written);
+
+mqttsn_status_t mqttsn_decode_auth(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_auth_t *auth);
+
 typedef struct {
   uint8_t has_packet_identifier;
   uint16_t packet_identifier;
