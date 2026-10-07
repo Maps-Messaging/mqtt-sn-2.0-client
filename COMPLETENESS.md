@@ -4,7 +4,7 @@ This matrix is intentionally conservative. A packet being present in the packet-
 catalogue or supported by the generic frame encoder does **not** mean its packet-specific
 fields and operational behaviour are implemented.
 
-Specification baseline: MQTT-SN 2.0 CSD01, 14 August 2026.
+Specification baseline: MQTT-SN 2.0 CSD01, 14 August 2026.\n\nSee also [PROTECTION.md](PROTECTION.md) for the pluggable Protection Encapsulation architecture.
 
 Legend:
 
@@ -43,7 +43,7 @@ Legend:
 | GWINFO | Typed | Wrapped | Typed | Typed | Shared C |
 | Forwarder Encapsulation | Typed | Wrapped | Typed | Typed | Shared C |
 | Connection Encapsulation | Typed | Wrapped | Typed | Typed | Shared C |
-| Protection Encapsulation | Generic | Generic | Generic | Generic | Shared C |
+| Protection Encapsulation | Pluggable envelope | Wrapped | Pluggable envelope | Pluggable envelope | Shared C |
 | Client state transitions | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
 | One-outstanding-request flow control | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
 | Packet-id allocation | Implemented foundation | Wrapped | Implemented foundation | Implemented foundation | Shared C |
@@ -52,7 +52,7 @@ Legend:
 | Keep-alive timer scheduler | Caller-driven timer | Wrapped | Caller-driven timer | Caller-driven timer | Shared C |
 | Session persistence | Missing | Missing | Missing | Missing | Missing |
 | Authentication exchange state | Partial/generic | Missing | Missing | Missing | Partial/generic |
-| Protection cryptography | Missing | Missing | Missing | Missing | Missing |
+| Protection cryptography | Provider extension | Provider extension | Provider extension | Provider extension | Provider extension |
 | Gateway discovery behaviour | Codec foundation | Wrapped | Codec foundation | Codec foundation | Shared C |
 
 ## Test coverage structure
@@ -114,7 +114,7 @@ At minimum, the following remain required:
 4. complete AUTH exchange semantics and applicable reason-code validation;
 5. complete applicable reason-code and session-expiry validation for DISCONNECT;
 6. higher-level gateway discovery behaviour where required by the test client;
-7. Protection Encapsulation envelope and cryptographic schemes;
+7. concrete Protection Providers for the required CSD01 schemes and their specification vectors;
 8. protection scheme implementation/tests where required for claimed conformance;
 9. requirement-by-requirement traceability in `shared/requirements.json`;
 10. integration/conformance tests runnable against MapsMessaging without MapsMessaging-specific expected behaviour.
