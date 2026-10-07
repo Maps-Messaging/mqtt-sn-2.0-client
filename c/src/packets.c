@@ -534,6 +534,206 @@ mqttsn_status_t mqttsn_decode_sleepresp(
 
 
 
+
+static int connection_encapsulation_allowed_type(mqttsn_packet_type_t type) {
+  return type == MQTTSN_PUBLISH ||
+         type == MQTTSN_SUBSCRIBE ||
+         type == MQTTSN_UNSUBSCRIBE ||
+         type == MQTTSN_REGISTER ||
+         type == MQTTSN_DISCONNECT ||
+         type == MQTTSN_SLEEPREQ ||
+         type == MQTTSN_PINGREQ;
+}
+
+static mqttsn_status_t validate_single_inner_packet(
+    const uint8_t *data,
+    size_t length,
+    int connection_restricted) {
+  mqttsn_packet_view_t inner;
+  size_t consumed = 0u;
+  mqttsn_status_t status;
+
+  if (data == NULL || length == 0u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  status = mqttsn_decode_packet(data, length, &inner, &consumed);
+  if (status != MQTTSN_OK || consumed != length) {
+    return status == MQTTSN_OK ? MQTTSN_MALFORMED_PACKET : status;
+  }
+
+  if (connection_restricted && !connection_encapsulation_allowed_type(inner.type)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  return MQTTSN_OK;
+}
+
+mqttsn_status_t mqttsn_encode_connection_encapsulation(
+    const mqttsn_connection_encapsulation_t *encapsulation,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t length_bytes[2];
+  mqttsn_buffer_t parts[3];
+  mqttsn_status_t status;
+
+  if (encapsulation == NULL || output == NULL || written == NULL ||
+      (encapsulation->client_identifier == NULL &&
+       encapsulation->client_identifier_length != 0u) ||
+      encapsulation->client_identifier_length > 0xFFFFu) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+
+  if (!mqttsn_utf8_is_valid(
+          encapsulation->client_identifier,
+          encapsulation->client_identifier_length)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  status = validate_single_inner_packet(
+      encapsulation->mqttsn_packet,
+      encapsulation->mqttsn_packet_length,
+      1);
+  if (status != MQTTSN_OK) {
+    return status;
+  }
+
+  write_u16_packet(length_bytes, (uint16_t)encapsulation->client_identifier_length);
+  parts[0] = (mqttsn_buffer_t){length_bytes, sizeof(length_bytes)};
+  parts[1] = (mqttsn_buffer_t){
+      encapsulation->client_identifier,
+      encapsulation->client_identifier_length};
+  parts[2] = (mqttsn_buffer_t){
+      encapsulation->mqttsn_packet,
+      encapsulation->mqttsn_packet_length};
+
+  return mqttsn_encode_packetv(
+      MQTTSN_CONNECTION_ENCAPSULATION,
+      parts,
+      3u,
+      output,
+      output_capacity,
+      written);
+}
+
+mqttsn_status_t mqttsn_decode_connection_encapsulation(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_connection_encapsulation_t *encapsulation) {
+  uint16_t client_identifier_length;
+  size_t offset = 2u;
+  mqttsn_status_t status;
+
+  if (packet == NULL || encapsulation == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_CONNECTION_ENCAPSULATION ||
+      packet->body_length < 2u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  client_identifier_length = read_u16_packet(packet->body);
+  if (packet->body_length - offset < client_identifier_length) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  memset(encapsulation, 0, sizeof(*encapsulation));
+  encapsulation->client_identifier = packet->body + offset;
+  encapsulation->client_identifier_length = client_identifier_length;
+  if (!mqttsn_utf8_is_valid(
+          encapsulation->client_identifier,
+          encapsulation->client_identifier_length)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  offset += client_identifier_length;
+  encapsulation->mqttsn_packet = packet->body + offset;
+  encapsulation->mqttsn_packet_length = packet->body_length - offset;
+
+  status = validate_single_inner_packet(
+      encapsulation->mqttsn_packet,
+      encapsulation->mqttsn_packet_length,
+      1);
+  return status;
+}
+
+mqttsn_status_t mqttsn_encode_forwarder_encapsulation(
+    const mqttsn_forwarder_encapsulation_t *encapsulation,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t addressing_length;
+  mqttsn_buffer_t parts[3];
+  mqttsn_status_t status;
+
+  if (encapsulation == NULL || output == NULL || written == NULL ||
+      encapsulation->client_addressing_information_length > 0xFFu ||
+      (encapsulation->client_addressing_information == NULL &&
+       encapsulation->client_addressing_information_length != 0u)) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+
+  status = validate_single_inner_packet(
+      encapsulation->mqttsn_packet,
+      encapsulation->mqttsn_packet_length,
+      0);
+  if (status != MQTTSN_OK) {
+    return status;
+  }
+
+  addressing_length =
+      (uint8_t)encapsulation->client_addressing_information_length;
+  parts[0] = (mqttsn_buffer_t){&addressing_length, 1u};
+  parts[1] = (mqttsn_buffer_t){
+      encapsulation->client_addressing_information,
+      encapsulation->client_addressing_information_length};
+  parts[2] = (mqttsn_buffer_t){
+      encapsulation->mqttsn_packet,
+      encapsulation->mqttsn_packet_length};
+
+  return mqttsn_encode_packetv(
+      MQTTSN_FORWARDER_ENCAPSULATION,
+      parts,
+      3u,
+      output,
+      output_capacity,
+      written);
+}
+
+mqttsn_status_t mqttsn_decode_forwarder_encapsulation(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_forwarder_encapsulation_t *encapsulation) {
+  size_t offset = 1u;
+  uint8_t addressing_length;
+  mqttsn_status_t status;
+
+  if (packet == NULL || encapsulation == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_FORWARDER_ENCAPSULATION ||
+      packet->body_length < 1u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  addressing_length = packet->body[0];
+  if (packet->body_length - offset < addressing_length) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  memset(encapsulation, 0, sizeof(*encapsulation));
+  encapsulation->client_addressing_information = packet->body + offset;
+  encapsulation->client_addressing_information_length = addressing_length;
+  offset += addressing_length;
+  encapsulation->mqttsn_packet = packet->body + offset;
+  encapsulation->mqttsn_packet_length = packet->body_length - offset;
+
+  status = validate_single_inner_packet(
+      encapsulation->mqttsn_packet,
+      encapsulation->mqttsn_packet_length,
+      0);
+  return status;
+}
+
 mqttsn_status_t mqttsn_encode_pubwos(
     const mqttsn_pubwos_t *packet,
     uint8_t *output,
