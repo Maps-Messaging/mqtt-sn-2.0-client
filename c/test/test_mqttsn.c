@@ -633,6 +633,55 @@ static void test_disconnect_codec(void) {
   }
 }
 
+
+static void test_auth_codec(void) {
+  const uint8_t method[] = "psk";
+  const uint8_t data[] = {0x01, 0x02, 0x03};
+  mqttsn_auth_t auth = {
+      .packet_identifier = 0x1234u,
+      .reason_code = 0x18u,
+      .authentication_method = method,
+      .authentication_method_length = sizeof(method) - 1u,
+      .authentication_data = data,
+      .authentication_data_length = sizeof(data)
+  };
+  uint8_t output[32];
+  size_t written = 0u;
+  size_t consumed = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_auth_t decoded;
+
+  assert(mqttsn_encode_auth(
+      &auth, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(mqttsn_decode_packet(
+      output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_auth(&packet, &decoded) == MQTTSN_OK);
+  assert(decoded.packet_identifier == 0x1234u);
+  assert(decoded.reason_code == 0x18u);
+  assert(decoded.authentication_method_length == 3u);
+  assert(memcmp(decoded.authentication_method, "psk", 3u) == 0);
+  assert(decoded.authentication_data_length == 3u);
+  assert(memcmp(decoded.authentication_data, data, 3u) == 0);
+
+  {
+    const uint8_t zero_id[] = {
+        0x06, MQTTSN_AUTH, 0x00, 0x00, 0x18, 0x00
+    };
+    assert(mqttsn_decode_packet(
+        zero_id, sizeof(zero_id), &packet, &consumed) == MQTTSN_OK);
+    assert(mqttsn_decode_auth(&packet, &decoded) == MQTTSN_MALFORMED_PACKET);
+  }
+
+  {
+    const uint8_t truncated[] = {
+        0x07, MQTTSN_AUTH, 0x12, 0x34, 0x18, 0x03, 'p'
+    };
+    assert(mqttsn_decode_packet(
+        truncated, sizeof(truncated), &packet, &consumed) == MQTTSN_OK);
+    assert(mqttsn_decode_auth(&packet, &decoded) == MQTTSN_MALFORMED_PACKET);
+  }
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -655,5 +704,6 @@ int main(void) {
   test_suback_zero_identifier_is_rejected();
   test_ack_types_and_wakeup();
   test_disconnect_codec();
+  test_auth_codec();
   return 0;
 }
