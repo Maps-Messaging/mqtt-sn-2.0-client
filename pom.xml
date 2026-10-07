@@ -44,6 +44,11 @@
   </modules>
 
   <distributionManagement>
+    <repository>
+      <id>maps_releases</id>
+      <name>maps_release_repository</name>
+      <url>https://repository.mapsmessaging.io/repository/maps_releases/</url>
+    </repository>
     <snapshotRepository>
       <id>maps_snapshots</id>
       <name>maps_snapshot_repository</name>
