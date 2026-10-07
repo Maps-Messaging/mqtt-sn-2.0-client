@@ -22,7 +22,7 @@ Legend:
 | Topic name/filter validation | Typed | Wrapped indirectly | Typed | Typed | Shared C |
 | CONNECT | Typed encode | Wrapped | Typed encode | Typed encode | Shared C |
 | CONNACK | Typed decode | Wrapped | Typed decode | Typed decode | Shared C |
-| AUTH | Generic | Generic | Generic | Generic | Shared C |
+| AUTH | Typed | Generic | Typed | Typed | Shared C |
 | REGISTER | Typed client encode | Generic | Typed client encode | Typed client encode | Shared C |
 | REGACK | Generic | Generic | Generic | Generic | Shared C |
 | PUBLISH | Typed encode/decode | Generic | Typed encode/decode | Typed encode/decode | Shared C |
@@ -33,7 +33,7 @@ Legend:
 | UNSUBACK | Typed common ack | Generic | Typed common ack | Typed common ack | Shared C |
 | PINGREQ | Typed encode | Generic | Typed encode | Typed encode | Shared C |
 | PINGRESP | Typed decode | Generic | Typed decode | Typed decode | Shared C |
-| DISCONNECT | Generic | Generic | Generic | Generic | Shared C |
+| DISCONNECT | Typed | Generic | Typed | Typed | Shared C |
 | SLEEPREQ | Typed encode | Generic | Typed encode | Typed encode | Shared C |
 | SLEEPRESP | Typed decode | Generic | Typed decode | Typed decode | Shared C |
 | WAKEUP | Typed encode | Generic | Typed encode | Typed encode | Shared C |
@@ -105,7 +105,7 @@ into an Arduino-specific test implementation.
 
 At minimum, the following remain required:
 
-1. typed codecs for every control packet applicable to that client;
+1. typed codecs for every remaining control packet applicable to that client;
 2. client state/flow controller in Python and a C++ wrapper for the C controller;
 3. retry, keep-alive and sleep timers driven by caller-supplied time rather than transport code;
 4. AUTH packet codecs and authentication exchange state;
