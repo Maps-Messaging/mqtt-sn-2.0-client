@@ -354,6 +354,112 @@ public final class MqttSnCodec {
 
 
 
+
+  public static byte[] encodeConnectionEncapsulation(ConnectionEncapsulation encapsulation) {
+    Objects.requireNonNull(encapsulation, "encapsulation");
+    byte[] clientIdentifier =
+        encapsulation.clientIdentifier().getBytes(StandardCharsets.UTF_8);
+    byte[] inner = encapsulation.mqttSnPacket();
+    validateSingleEncapsulatedPacket(inner, true);
+
+    ByteBuffer body = ByteBuffer.allocate(2 + clientIdentifier.length + inner.length);
+    body.putShort((short) clientIdentifier.length);
+    body.put(clientIdentifier);
+    body.put(inner);
+    return encode(PacketType.CONNECTION_ENCAPSULATION, body.array());
+  }
+
+  public static ConnectionEncapsulation decodeConnectionEncapsulation(
+      DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.CONNECTION_ENCAPSULATION) {
+      throw malformed("Expected Connection Encapsulation");
+    }
+
+    ByteBuffer body = packet.body();
+    requireRemaining(body, 2, "Connection Encapsulation Client Identifier Length");
+    int clientIdentifierLength = Short.toUnsignedInt(body.getShort());
+    requireRemaining(
+        body,
+        clientIdentifierLength,
+        "Connection Encapsulation Client Identifier");
+
+    ByteBuffer clientIdBytes = body.slice();
+    clientIdBytes.limit(clientIdentifierLength);
+    String clientIdentifier = MqttSnUtf8.decode(clientIdBytes);
+    body.position(body.position() + clientIdentifierLength);
+
+    byte[] inner = new byte[body.remaining()];
+    body.get(inner);
+    validateSingleEncapsulatedPacket(inner, true);
+
+    return new ConnectionEncapsulation(clientIdentifier, inner);
+  }
+
+  public static byte[] encodeForwarderEncapsulation(ForwarderEncapsulation encapsulation) {
+    Objects.requireNonNull(encapsulation, "encapsulation");
+    byte[] addressing = encapsulation.clientAddressingInformation();
+    byte[] inner = encapsulation.mqttSnPacket();
+    validateSingleEncapsulatedPacket(inner, false);
+
+    ByteBuffer body = ByteBuffer.allocate(1 + addressing.length + inner.length);
+    body.put((byte) addressing.length);
+    body.put(addressing);
+    body.put(inner);
+    return encode(PacketType.FORWARDER_ENCAPSULATION, body.array());
+  }
+
+  public static ForwarderEncapsulation decodeForwarderEncapsulation(
+      DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.FORWARDER_ENCAPSULATION) {
+      throw malformed("Expected Forwarder Encapsulation");
+    }
+
+    ByteBuffer body = packet.body();
+    requireRemaining(body, 1, "Forwarder Client Addressing Information Length");
+    int addressingLength = Byte.toUnsignedInt(body.get());
+    requireRemaining(
+        body,
+        addressingLength,
+        "Forwarder Client Addressing Information");
+
+    byte[] addressing = new byte[addressingLength];
+    body.get(addressing);
+
+    byte[] inner = new byte[body.remaining()];
+    body.get(inner);
+    validateSingleEncapsulatedPacket(inner, false);
+
+    return new ForwarderEncapsulation(addressing, inner);
+  }
+
+  private static void validateSingleEncapsulatedPacket(byte[] inner, boolean connection) {
+    if (inner.length == 0) {
+      throw malformed("Encapsulation must contain one MQTT-SN packet");
+    }
+
+    DecodedPacket decoded = decode(ByteBuffer.wrap(inner));
+    if (decoded.packetLength() != inner.length) {
+      throw malformed("Encapsulation must contain exactly one MQTT-SN packet");
+    }
+
+    if (connection && !isConnectionEncapsulationAllowed(decoded.type())) {
+      throw malformed(
+          "Connection Encapsulation is not allowed for " + decoded.type());
+    }
+  }
+
+  private static boolean isConnectionEncapsulationAllowed(PacketType type) {
+    return type == PacketType.PUBLISH
+        || type == PacketType.SUBSCRIBE
+        || type == PacketType.UNSUBSCRIBE
+        || type == PacketType.REGISTER
+        || type == PacketType.DISCONNECT
+        || type == PacketType.SLEEPREQ
+        || type == PacketType.PINGREQ;
+  }
+
   public static byte[] encodePubWos(PubWosPacket packet) {
     Objects.requireNonNull(packet, "packet");
     byte[] topicName = packet.topic().type() == TopicType.NAME
