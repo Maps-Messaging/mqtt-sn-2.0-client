@@ -570,6 +570,103 @@ mqttsn_status_t mqttsn_client_track_inbound(
   return MQTTSN_OK;
 }
 
+
+void mqttsn_retry_timer_init(
+    mqttsn_retry_timer_t *timer,
+    uint64_t retry_interval_ms,
+    uint32_t maximum_retry_count) {
+  if (timer == NULL) {
+    return;
+  }
+  memset(timer, 0, sizeof(*timer));
+  timer->retry_interval_ms = retry_interval_ms;
+  timer->maximum_retry_count = maximum_retry_count;
+}
+
+void mqttsn_retry_timer_start(
+    mqttsn_retry_timer_t *timer,
+    uint64_t now_ms) {
+  if (timer == NULL || timer->retry_interval_ms == 0u) {
+    return;
+  }
+  timer->active = 1u;
+  timer->retries_sent = 0u;
+  timer->deadline_ms = now_ms + timer->retry_interval_ms;
+}
+
+void mqttsn_retry_timer_cancel(
+    mqttsn_retry_timer_t *timer) {
+  if (timer == NULL) {
+    return;
+  }
+  timer->active = 0u;
+  timer->retries_sent = 0u;
+}
+
+mqttsn_retry_action_t mqttsn_retry_timer_poll(
+    mqttsn_retry_timer_t *timer,
+    uint64_t now_ms) {
+  if (timer == NULL || !timer->active || now_ms < timer->deadline_ms) {
+    return MQTTSN_RETRY_NONE;
+  }
+
+  if (timer->retries_sent < timer->maximum_retry_count) {
+    timer->retries_sent++;
+    timer->deadline_ms = now_ms + timer->retry_interval_ms;
+    return MQTTSN_RETRY_RETRANSMIT;
+  }
+
+  timer->active = 0u;
+  return MQTTSN_RETRY_DELETE_CONNECTION;
+}
+
+void mqttsn_keep_alive_timer_init(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t keep_alive_ms) {
+  if (timer == NULL) {
+    return;
+  }
+  memset(timer, 0, sizeof(*timer));
+  timer->keep_alive_ms = keep_alive_ms;
+}
+
+void mqttsn_keep_alive_timer_start(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t now_ms) {
+  if (timer == NULL || timer->keep_alive_ms == 0u) {
+    return;
+  }
+  timer->active = 1u;
+  timer->deadline_ms = now_ms + timer->keep_alive_ms;
+}
+
+void mqttsn_keep_alive_timer_outbound_activity(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t now_ms) {
+  if (timer == NULL || !timer->active) {
+    return;
+  }
+  timer->deadline_ms = now_ms + timer->keep_alive_ms;
+}
+
+void mqttsn_keep_alive_timer_stop(
+    mqttsn_keep_alive_timer_t *timer) {
+  if (timer == NULL) {
+    return;
+  }
+  timer->active = 0u;
+}
+
+mqttsn_keep_alive_action_t mqttsn_keep_alive_timer_poll(
+    mqttsn_keep_alive_timer_t *timer,
+    uint64_t now_ms) {
+  if (timer == NULL || !timer->active || now_ms < timer->deadline_ms) {
+    return MQTTSN_KEEP_ALIVE_NONE;
+  }
+  timer->deadline_ms = now_ms + timer->keep_alive_ms;
+  return MQTTSN_KEEP_ALIVE_SEND_PINGREQ;
+}
+
 void mqttsn_client_retry_exhausted(mqttsn_client_t *client) {
   if (client == NULL) {
     return;
