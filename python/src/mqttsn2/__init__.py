@@ -122,6 +122,8 @@ __all__ = [
     "encode_subscribe",
     "encode_unsubscribe",
     "encode_wakeup",
+    "ClientState",
+    "Session",
     "KeepAliveAction",
     "KeepAliveTimer",
     "RetryAction",
@@ -129,3 +131,5 @@ __all__ = [
 ]
 
 from .timers import KeepAliveAction, KeepAliveTimer, RetryAction, RetryTimer
+
+from .session import ClientState, Session
