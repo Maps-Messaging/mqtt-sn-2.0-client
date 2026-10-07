@@ -68,6 +68,8 @@ class ConnectOptions:
     keep_alive_seconds: int
     maximum_packet_size: int = 0
     client_identifier: str = ""
+    authentication_method: str | None = None
+    authentication_data: bytes = b""
 
     def __post_init__(self) -> None:
         if not 1 <= self.packet_identifier <= 0xFFFF:
@@ -80,6 +82,14 @@ class ConnectOptions:
         ):
             raise ValueError("maximum_packet_size must be 0 or 10..65535")
         _encode_utf8(self.client_identifier)
+        if self.authentication_method is not None:
+            method = _encode_utf8(self.authentication_method)
+            if not 1 <= len(method) <= 0xFF:
+                raise ValueError("authentication_method must contain 1..255 UTF-8 bytes")
+            if len(self.authentication_data) > 0xFFFF:
+                raise ValueError("authentication_data must contain at most 65535 bytes")
+        elif self.authentication_data:
+            raise ValueError("authentication_data requires authentication_method")
 
 
 @dataclass(frozen=True)
@@ -198,18 +208,28 @@ def encode_connect(options: ConnectOptions) -> bytes:
     flags = 0
     if options.clean_start:
         flags |= 0x01
+    if options.authentication_method is not None:
+        flags |= 0x04
     if options.allow_network_address_changes:
         flags |= 0x20
     if options.allow_server_suggested_values:
         flags |= 0x40
 
-    body = bytearray(8 + len(client_identifier))
-    body[0] = flags
-    body[1:3] = options.packet_identifier.to_bytes(2, "big")
-    body[3] = 0x02
-    body[4:6] = options.keep_alive_seconds.to_bytes(2, "big")
-    body[6:8] = options.maximum_packet_size.to_bytes(2, "big")
-    body[8:] = client_identifier
+    body = bytearray()
+    body.append(flags)
+    body += options.packet_identifier.to_bytes(2, "big")
+    body.append(0x02)
+    body += options.keep_alive_seconds.to_bytes(2, "big")
+    body += options.maximum_packet_size.to_bytes(2, "big")
+
+    if options.authentication_method is not None:
+        method = _encode_utf8(options.authentication_method)
+        body.append(len(method))
+        body += method
+        body += len(options.authentication_data).to_bytes(2, "big")
+        body += options.authentication_data
+
+    body += client_identifier
     return encode_packet(PacketType.CONNECT, body)
 
 
