@@ -352,6 +352,51 @@ public final class MqttSnCodec {
   }
 
 
+
+  public static byte[] encodeAuth(AuthPacket auth) {
+    Objects.requireNonNull(auth, "auth");
+    byte[] method = auth.authenticationMethod().getBytes(StandardCharsets.UTF_8);
+    byte[] data = auth.authenticationData();
+
+    ByteBuffer body = ByteBuffer.allocate(4 + method.length + data.length);
+    body.putShort((short) auth.packetIdentifier());
+    body.put((byte) auth.reasonCode());
+    body.put((byte) method.length);
+    body.put(method);
+    body.put(data);
+
+    return encode(PacketType.AUTH, body.array());
+  }
+
+  public static AuthPacket decodeAuth(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.AUTH) {
+      throw malformed("Expected AUTH");
+    }
+
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    requireRemaining(body, 4, "AUTH");
+
+    int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    if (packetIdentifier == 0) {
+      throw malformed("AUTH Packet Identifier must be non-zero");
+    }
+
+    int reasonCode = Byte.toUnsignedInt(body.get());
+    int methodLength = Byte.toUnsignedInt(body.get());
+    requireRemaining(body, methodLength, "AUTH Authentication Method");
+
+    ByteBuffer methodBuffer = body.slice();
+    methodBuffer.limit(methodLength);
+    String method = MqttSnUtf8.decode(methodBuffer);
+    body.position(body.position() + methodLength);
+
+    byte[] data = new byte[body.remaining()];
+    body.get(data);
+
+    return new AuthPacket(packetIdentifier, reasonCode, method, data);
+  }
+
   public static byte[] encodeDisconnect(DisconnectOptions options) {
     Objects.requireNonNull(options, "options");
 
