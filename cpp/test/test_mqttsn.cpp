@@ -308,6 +308,107 @@ static void test_session_wrapper() {
   assert(wrapping.nextPacketIdentifier() == 1u);
 }
 
+
+class CopyProtectionProvider final : public mqttsn::ProtectionProvider {
+ public:
+  bool supports(std::uint8_t scheme) const override {
+    return scheme == 0x3Cu || scheme == 0x40u;
+  }
+
+  bool authenticationOnly(std::uint8_t scheme) const override {
+    return scheme == 0x3Cu;
+  }
+
+  std::size_t authenticationTagLength(
+      std::uint8_t scheme,
+      std::uint8_t tagLengthCode) const override {
+    if (tagLengthCode == 0u) {
+      return 6u;
+    }
+    if (tagLengthCode == 1u) {
+      return scheme == 0x40u ? 8u : 16u;
+    }
+    return tagLengthCode >= 4u ? static_cast<std::size_t>(tagLengthCode) * 2u : 0u;
+  }
+
+  std::size_t protectedPacketLength(
+      std::uint8_t,
+      std::size_t mqttSnPacketLength) const override {
+    return mqttSnPacketLength;
+  }
+
+  mqttsn::ProtectedContent protect(
+      const mqttsn::ProtectionContext& context,
+      std::span<const std::uint8_t> mqttSnPacket) override {
+    std::vector<std::uint8_t> protectedPacket(
+        mqttSnPacket.begin(), mqttSnPacket.end());
+    std::vector<std::uint8_t> tag(
+        authenticationTagLength(context.scheme, context.tagLengthCode),
+        static_cast<std::uint8_t>(context.authenticatedPrefix.size()));
+    return mqttsn::ProtectedContent{
+        std::move(protectedPacket),
+        std::move(tag)};
+  }
+
+  std::vector<std::uint8_t> unprotect(
+      const mqttsn::ProtectionContext& context,
+      std::span<const std::uint8_t> protectedPacket,
+      std::span<const std::uint8_t> authenticationTag) override {
+    const auto expected =
+        static_cast<std::uint8_t>(context.authenticatedPrefix.size());
+    for (const auto value : authenticationTag) {
+      if (value != expected) {
+        throw std::runtime_error("authentication failed");
+      }
+    }
+    return std::vector<std::uint8_t>(
+        protectedPacket.begin(), protectedPacket.end());
+  }
+};
+
+static void test_protection_wrapper() {
+  CopyProtectionProvider provider;
+  const std::array<std::uint8_t, 8> sender{
+      1u,2u,3u,4u,5u,6u,7u,8u};
+  const std::array<std::uint8_t, 4> random{
+      9u,10u,11u,12u};
+  const std::array<std::uint8_t, 2> crypto{
+      0x21u,0x22u};
+  const std::array<std::uint8_t, 2> counter{
+      0x00u,0x01u};
+  const std::array<std::uint8_t, 4> inner{
+      0x04u,0x0Cu,0x12u,0x34u};
+
+  const mqttsn::ProtectionEnvelope envelope{
+      0x3Cu,
+      0x04u,
+      sender,
+      random,
+      crypto,
+      counter,
+      inner};
+
+  auto encoded = mqttsn::ProtectionCodec::encode(envelope, provider);
+  auto decoded = mqttsn::ProtectionCodec::decode(encoded, provider);
+
+  assert(decoded.scheme == 0x3Cu);
+  assert(decoded.tagLengthCode == 0x04u);
+  assert(decoded.senderIdentifier.size() == 8u);
+  assert(decoded.random.size() == 4u);
+  assert(decoded.cryptographicMaterial.size() == 2u);
+  assert(decoded.monotonicCounter.size() == 2u);
+  assert(decoded.mqttSnPacket.size() == 4u);
+  assert(decoded.mqttSnPacket[1] == 0x0Cu);
+
+  encoded.back() ^= 0x01u;
+  try {
+    (void)mqttsn::ProtectionCodec::decode(encoded, provider);
+    assert(false);
+  } catch (const mqttsn::Error& error) {
+    assert(error.status() == MQTTSN_MALFORMED_PACKET);
+  }
+}
+
 int main() {
   test_short_and_extended_framing();
   test_connect_and_connack();
@@ -319,5 +420,6 @@ int main() {
   test_timer_wrappers();
   test_encapsulation_wrappers();
   test_session_wrapper();
+  test_protection_wrapper();
   return 0;
 }
