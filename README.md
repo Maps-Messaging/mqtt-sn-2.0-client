@@ -63,7 +63,22 @@ network / radio / serial
 | Java | Independent reference client | None |
 | Python | Independent reference client | None |
 
-See [COMPLETENESS.md](COMPLETENESS.md) for the current per-language implementation and test matrix.\n\n## Conformance rules
+See [COMPLETENESS.md](COMPLETENESS.md) for the current per-language implementation and test matrix.
+
+## Documentation
+
+- [Usage guide](docs/USAGE.md)
+- [Authentication, including SASL integration](docs/AUTHENTICATION.md)
+- [Conformance status](docs/CONFORMANCE.md)
+- [Specification baseline](SPECIFICATION.md)
+- [Protection providers](PROTECTION.md)
+- [C guide](c/README.md)
+- [C++ guide](cpp/README.md)
+- [Java guide](java/README.md)
+- [Python guide](python/README.md)
+- [Arduino guide](arduino/README.md)
+
+## Conformance rules
 
 Every conformance test must identify the MQTT-SN specification requirement or section that establishes the expected result.
 
@@ -71,17 +86,21 @@ Normative `MUST` and `MUST NOT` requirements are treated as hard failures. `SHOU
 
 Specification ambiguity is documented rather than resolved with MapsMessaging-specific behaviour.
 
-## Current foundation
+## Current implementation
 
-The initial implementation provides:
+The suite currently provides:
 
 - the complete MQTT-SN 2.0 control packet type catalogue from section 2.1.3;
 - one-byte and three-byte packet length encoding/decoding from section 2.1.2;
 - reserved packet-type rejection;
 - transport-neutral buffer encode/decode APIs;
-- shared wire vectors consumed by implementations as they mature.
-
-Packet-specific field codecs, client state transitions, retry behaviour, sleeping client behaviour, discovery, authentication, and encapsulation conformance are built on top of this foundation.
+- shared wire and protection vectors used across implementations;
+- packet-specific codecs and client state/flow control;
+- generic enhanced authentication with challenge/response and re-authentication;
+- Java SASL adapter as an optional authentication mechanism example;
+- gateway discovery and encapsulation;
+- pluggable Protection Encapsulation with standard desktop crypto providers;
+- Java UDP transport adapter.
 
 ## Build
 
@@ -104,8 +123,7 @@ ctest --test-dir build/cpp --output-on-failure
 ### Java
 
 ```bash
-cd java
-mvn test
+mvn --batch-mode clean verify
 ```
 
 ### Python

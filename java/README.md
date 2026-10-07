@@ -170,3 +170,31 @@ being hard-coded into the MQTT-SN library.
 The root Maven reactor builds and deploys both artifacts. On `main`, Buildkite
 publishes both snapshot artifacts to the standard MAPS `maps_snapshots`
 repository.
+
+
+## Enhanced authentication
+
+The Java core exposes a mechanism-agnostic authentication API:
+
+```java
+AuthenticationExchange auth =
+    new AuthenticationExchange(myMechanism);
+
+byte[] initial = auth.initialResponse();
+
+byte[] connect = MqttSnCodec.encodeConnect(
+    options,
+    auth.method(),
+    initial);
+```
+
+`AuthenticationMechanism` is deliberately not SASL-specific.
+
+For applications such as MapsMessaging that already use SASL,
+`SaslAuthenticationMechanism` adapts a standard
+`javax.security.sasl.SaslClient`.
+
+Use a `SaslClient` factory when re-authentication is required so a fresh SASL
+exchange can be created.
+
+See [../docs/AUTHENTICATION.md](../docs/AUTHENTICATION.md).
