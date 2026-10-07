@@ -1,6 +1,7 @@
 #ifndef MQTT_SN_2_MQTTSN_HPP
 #define MQTT_SN_2_MQTTSN_HPP
 
+#include <algorithm>
 #include <cstdint>
 #include <span>
 #include <stdexcept>
@@ -281,17 +282,25 @@ class ProtectionCodec {
         std::vector<std::uint8_t>(
             nativeEnvelope.random,
             nativeEnvelope.random + nativeEnvelope.random_length),
-        std::vector<std::uint8_t>(
+        copyBytes(
             nativeEnvelope.cryptographic_material,
-            nativeEnvelope.cryptographic_material
-                + nativeEnvelope.cryptographic_material_length),
-        std::vector<std::uint8_t>(
+            nativeEnvelope.cryptographic_material_length),
+        copyBytes(
             nativeEnvelope.monotonic_counter,
-            nativeEnvelope.monotonic_counter + nativeEnvelope.monotonic_counter_length),
+            nativeEnvelope.monotonic_counter_length),
         std::move(inner)};
   }
 
  private:
+  static std::vector<std::uint8_t> copyBytes(
+      const std::uint8_t* data,
+      std::size_t length) {
+    if (length == 0u) {
+      return {};
+    }
+    return std::vector<std::uint8_t>(data, data + length);
+  }
+
   class ProviderBridge {
    public:
     explicit ProviderBridge(ProtectionProvider& provider) : provider_(provider) {}
