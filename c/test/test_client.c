@@ -318,6 +318,43 @@ static void test_failed_connack_disconnects(void) {
   assert(client.state == MQTTSN_CLIENT_DISCONNECTED);
 }
 
+
+static void test_retry_timer(void) {
+  mqttsn_retry_timer_t timer;
+
+  mqttsn_retry_timer_init(&timer, 1000u, 2u);
+  mqttsn_retry_timer_start(&timer, 100u);
+
+  assert(mqttsn_retry_timer_poll(&timer, 1099u) == MQTTSN_RETRY_NONE);
+  assert(mqttsn_retry_timer_poll(&timer, 1100u) == MQTTSN_RETRY_RETRANSMIT);
+  assert(timer.retries_sent == 1u);
+  assert(mqttsn_retry_timer_poll(&timer, 2100u) == MQTTSN_RETRY_RETRANSMIT);
+  assert(timer.retries_sent == 2u);
+  assert(mqttsn_retry_timer_poll(&timer, 3100u) == MQTTSN_RETRY_DELETE_CONNECTION);
+  assert(timer.active == 0u);
+
+  mqttsn_retry_timer_start(&timer, 5000u);
+  mqttsn_retry_timer_cancel(&timer);
+  assert(mqttsn_retry_timer_poll(&timer, 10000u) == MQTTSN_RETRY_NONE);
+}
+
+static void test_keep_alive_timer(void) {
+  mqttsn_keep_alive_timer_t timer;
+
+  mqttsn_keep_alive_timer_init(&timer, 1000u);
+  mqttsn_keep_alive_timer_start(&timer, 0u);
+
+  assert(mqttsn_keep_alive_timer_poll(&timer, 999u) == MQTTSN_KEEP_ALIVE_NONE);
+  mqttsn_keep_alive_timer_outbound_activity(&timer, 900u);
+  assert(mqttsn_keep_alive_timer_poll(&timer, 1000u) == MQTTSN_KEEP_ALIVE_NONE);
+  assert(mqttsn_keep_alive_timer_poll(&timer, 1900u) == MQTTSN_KEEP_ALIVE_SEND_PINGREQ);
+  assert(mqttsn_keep_alive_timer_poll(&timer, 2899u) == MQTTSN_KEEP_ALIVE_NONE);
+  assert(mqttsn_keep_alive_timer_poll(&timer, 2900u) == MQTTSN_KEEP_ALIVE_SEND_PINGREQ);
+
+  mqttsn_keep_alive_timer_stop(&timer);
+  assert(mqttsn_keep_alive_timer_poll(&timer, 10000u) == MQTTSN_KEEP_ALIVE_NONE);
+}
+
 int main(void) {
   test_connection_state();
   test_outbound_flow_control();
@@ -329,5 +366,7 @@ int main(void) {
   test_mismatched_response_is_rejected();
   test_state_restrictions();
   test_failed_connack_disconnects();
+  test_retry_timer();
+  test_keep_alive_timer();
   return 0;
 }
