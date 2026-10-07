@@ -32,13 +32,16 @@ The build also creates source and Javadoc JARs.
 
 ## Publish a snapshot
 
-The project uses the existing MapsMessaging snapshot repository:
+The project uses the standard MAPS Maven repositories:
 
 ```text
-https://repository.mapsmessaging.io/repository/maps_snapshots/
+Snapshots: https://repository.mapsmessaging.io/repository/maps_snapshots/
+Releases:  https://repository.mapsmessaging.io/repository/maps_releases/
 ```
 
-Maven credentials are resolved using server id `maps_snapshots`. Configure them in `~/.m2/settings.xml`:
+No Maven Central/Sonatype publication is used for this project.
+
+Maven credentials are resolved using the standard MAPS server ids `maps_snapshots` and `maps_releases`. Configure the credentials you use for those repositories in `~/.m2/settings.xml`. For the current `0.1.0-SNAPSHOT` build, Maven deploys to `maps_snapshots`:
 
 ```xml
 <settings>
