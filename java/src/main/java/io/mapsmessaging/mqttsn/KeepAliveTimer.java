@@ -33,6 +33,10 @@ public final class KeepAliveTimer {
     active = false;
   }
 
+  public boolean active() {
+    return active;
+  }
+
   public KeepAliveAction poll(long nowMillis) {
     if (!active || nowMillis < deadlineMillis) {
       return KeepAliveAction.NONE;
