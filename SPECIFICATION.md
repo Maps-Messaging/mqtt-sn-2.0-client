@@ -37,13 +37,22 @@ The specification marks automatically testable normative statements using identi
 
 Tests should cite those identifiers whenever one exists. Otherwise they must cite the narrowest relevant section.
 
-## Initial framing requirements
+## Implementation status
 
-The framing layer currently implements these baseline rules:
+The suite now implements the CSD01 packet framing, packet-specific client
+codecs, client state/flow control, enhanced authentication exchange,
+re-authentication, discovery packets, Connection/Forwarder/Protection
+Encapsulation, caller-driven retry/Keep Alive handling, and the standard
+CSD01 protection schemes through pluggable providers.
 
-- Section 2.1.2: the Length field is one byte or three bytes.
-- MQTT-SN-2.1.2-1: clients and servers must process both length formats.
-- Section 2.1.3: control packet type is an unsigned byte with the values defined by the draft.
-- Reserved packet type values are forbidden.
+The repository deliberately distinguishes implementation coverage from a formal
+100% conformance claim. Full normative closure is tracked in
+`shared/requirements.json` and [COMPLETENESS.md](COMPLETENESS.md).
 
-The remaining packet-specific and operational requirements are tracked under MSG-403 and must be implemented before the suite is described as fully conformant.
+See:
+
+- [docs/USAGE.md](docs/USAGE.md) for client usage;
+- [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for generic enhanced
+  authentication and the optional Java SASL adapter;
+- [docs/CONFORMANCE.md](docs/CONFORMANCE.md) for the conformance statement;
+- [PROTECTION.md](PROTECTION.md) for pluggable protection providers.
