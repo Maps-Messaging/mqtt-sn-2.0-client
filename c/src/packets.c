@@ -532,6 +532,78 @@ mqttsn_status_t mqttsn_decode_sleepresp(
 }
 
 
+
+mqttsn_status_t mqttsn_encode_auth(
+    const mqttsn_auth_t *auth,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *written) {
+  uint8_t prefix[4];
+  mqttsn_buffer_t parts[3];
+
+  if (auth == NULL || output == NULL || written == NULL ||
+      auth->packet_identifier == 0u ||
+      auth->authentication_method_length > 0xFFu ||
+      (auth->authentication_method == NULL && auth->authentication_method_length != 0u) ||
+      (auth->authentication_data == NULL && auth->authentication_data_length != 0u) ||
+      !mqttsn_utf8_is_valid(auth->authentication_method, auth->authentication_method_length)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  write_u16_packet(prefix, auth->packet_identifier);
+  prefix[2] = auth->reason_code;
+  prefix[3] = (uint8_t)auth->authentication_method_length;
+
+  parts[0] = (mqttsn_buffer_t){prefix, sizeof(prefix)};
+  parts[1] = (mqttsn_buffer_t){
+      auth->authentication_method, auth->authentication_method_length};
+  parts[2] = (mqttsn_buffer_t){
+      auth->authentication_data, auth->authentication_data_length};
+
+  return mqttsn_encode_packetv(
+      MQTTSN_AUTH, parts, 3u, output, output_capacity, written);
+}
+
+mqttsn_status_t mqttsn_decode_auth(
+    const mqttsn_packet_view_t *packet,
+    mqttsn_auth_t *auth) {
+  const uint8_t *body;
+  size_t method_length;
+
+  if (packet == NULL || auth == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (packet->type != MQTTSN_AUTH || packet->body_length < 4u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  memset(auth, 0, sizeof(*auth));
+  body = packet->body;
+  auth->packet_identifier = read_u16_packet(body);
+  if (auth->packet_identifier == 0u) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  auth->reason_code = body[2];
+  method_length = body[3];
+  if (packet->body_length < 4u + method_length) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  auth->authentication_method = body + 4u;
+  auth->authentication_method_length = method_length;
+  if (!mqttsn_utf8_is_valid(
+          auth->authentication_method,
+          auth->authentication_method_length)) {
+    return MQTTSN_MALFORMED_PACKET;
+  }
+
+  auth->authentication_data = body + 4u + method_length;
+  auth->authentication_data_length =
+      packet->body_length - 4u - method_length;
+  return MQTTSN_OK;
+}
+
 mqttsn_status_t mqttsn_encode_disconnect(
     const mqttsn_disconnect_options_t *options,
     uint8_t *output,
