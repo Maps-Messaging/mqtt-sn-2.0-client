@@ -682,6 +682,105 @@ static void test_auth_codec(void) {
   }
 }
 
+
+static void test_pubwos_and_gateway_discovery(void) {
+  const uint8_t topic[] = "a/b";
+  const uint8_t payload[] = {'x'};
+  const uint8_t network_info[] = {0x01, 0x02};
+  const uint8_t gateway_address[] = {0xC0, 0xA8, 0x01, 0x01};
+  mqttsn_pubwos_t pubwos = {
+      .retain = 0u,
+      .topic = {
+          .type = MQTTSN_TOPIC_NAME,
+          .alias = 0u,
+          .name = topic,
+          .name_length = sizeof(topic) - 1u
+      },
+      .payload = payload,
+      .payload_length = sizeof(payload)
+  };
+  mqttsn_advertise_t advertise = {
+      .gateway_identifier = 7u,
+      .duration = 60u
+  };
+  mqttsn_searchgw_t searchgw = {
+      .additional_network_information = network_info,
+      .additional_network_information_length = sizeof(network_info)
+  };
+  mqttsn_gwinfo_t gwinfo = {
+      .gateway_identifier = 7u,
+      .gateway_address = gateway_address,
+      .gateway_address_length = sizeof(gateway_address)
+  };
+  uint8_t output[64];
+  size_t written = 0u;
+  size_t consumed = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_pubwos_t decoded_pubwos;
+  mqttsn_advertise_t decoded_advertise;
+  mqttsn_searchgw_t decoded_searchgw;
+  mqttsn_gwinfo_t decoded_gwinfo;
+
+  assert(mqttsn_encode_pubwos(
+      &pubwos, output, sizeof(output), &written) == MQTTSN_OK);
+  {
+    const uint8_t expected[] = {
+        0x09, MQTTSN_PUBWOS, 0x03, 0x00, 0x03, 'a', '/', 'b', 'x'
+    };
+    assert(written == sizeof(expected));
+    assert(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+  assert(mqttsn_decode_packet(output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_pubwos(&packet, &decoded_pubwos) == MQTTSN_OK);
+  assert(decoded_pubwos.topic.type == MQTTSN_TOPIC_NAME);
+  assert(decoded_pubwos.topic.name_length == 3u);
+  assert(decoded_pubwos.payload_length == 1u);
+
+  pubwos.topic.type = MQTTSN_TOPIC_SESSION_ALIAS;
+  pubwos.topic.alias = 1u;
+  pubwos.topic.name = NULL;
+  pubwos.topic.name_length = 0u;
+  assert(mqttsn_encode_pubwos(
+      &pubwos, output, sizeof(output), &written) == MQTTSN_MALFORMED_PACKET);
+
+  assert(mqttsn_encode_advertise(
+      &advertise, output, sizeof(output), &written) == MQTTSN_OK);
+  {
+    const uint8_t expected[] = {0x05, MQTTSN_ADVERTISE, 0x07, 0x00, 0x3C};
+    assert(written == sizeof(expected));
+    assert(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+  assert(mqttsn_decode_packet(output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_advertise(&packet, &decoded_advertise) == MQTTSN_OK);
+  assert(decoded_advertise.gateway_identifier == 7u);
+  assert(decoded_advertise.duration == 60u);
+
+  assert(mqttsn_encode_searchgw(
+      &searchgw, output, sizeof(output), &written) == MQTTSN_OK);
+  {
+    const uint8_t expected[] = {0x04, MQTTSN_SEARCHGW, 0x01, 0x02};
+    assert(written == sizeof(expected));
+    assert(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+  assert(mqttsn_decode_packet(output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_searchgw(&packet, &decoded_searchgw) == MQTTSN_OK);
+  assert(decoded_searchgw.additional_network_information_length == 2u);
+
+  assert(mqttsn_encode_gwinfo(
+      &gwinfo, output, sizeof(output), &written) == MQTTSN_OK);
+  {
+    const uint8_t expected[] = {
+        0x07, MQTTSN_GWINFO, 0x07, 0xC0, 0xA8, 0x01, 0x01
+    };
+    assert(written == sizeof(expected));
+    assert(memcmp(output, expected, sizeof(expected)) == 0);
+  }
+  assert(mqttsn_decode_packet(output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_gwinfo(&packet, &decoded_gwinfo) == MQTTSN_OK);
+  assert(decoded_gwinfo.gateway_identifier == 7u);
+  assert(decoded_gwinfo.gateway_address_length == 4u);
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -705,5 +804,6 @@ int main(void) {
   test_ack_types_and_wakeup();
   test_disconnect_codec();
   test_auth_codec();
+  test_pubwos_and_gateway_discovery();
   return 0;
 }
