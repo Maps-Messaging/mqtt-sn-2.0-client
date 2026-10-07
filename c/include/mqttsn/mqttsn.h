@@ -136,6 +136,10 @@ typedef struct {
   uint16_t packet_identifier;
   uint16_t keep_alive;
   uint16_t maximum_packet_size;
+  const uint8_t *authentication_method;
+  size_t authentication_method_length;
+  const uint8_t *authentication_data;
+  size_t authentication_data_length;
   const uint8_t *client_identifier;
   size_t client_identifier_length;
 } mqttsn_connect_options_t;
@@ -172,9 +176,11 @@ int mqttsn_topic_name_is_valid(const uint8_t *data, size_t length);
 int mqttsn_topic_filter_is_valid(const uint8_t *data, size_t length);
 
 /*
- * Encode the mandatory CONNECT fields plus an optional Client Identifier.
- * Will, Authentication, Session Expiry and Maximum Awake Messages are
- * separate extensions to this structure and are not silently emitted.
+ * Encode the mandatory CONNECT fields plus optional Authentication Method/Data
+ * and Client Identifier. Authentication fields are emitted only when an
+ * Authentication Method is supplied.
+ *
+ * Will, Session Expiry and Maximum Awake Messages remain separate extensions.
  *
  * Enforces MQTT-SN-2.2-1, MQTT-SN-3.1.2-1, MQTT-SN-3.1.5-1,
  * MQTT-SN-3.1.6-4, MQTT-SN-3.1.7-1 and MQTT-SN-3.1.18-1.
