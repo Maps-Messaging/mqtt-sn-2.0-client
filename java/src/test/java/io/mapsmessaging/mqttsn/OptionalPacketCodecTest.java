@@ -7,6 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.nio.ByteBuffer;
 import org.junit.jupiter.api.Test;
 
+/**
+ * MQTT-SN 2.0 CSD01: §3.6.1 PUBWOS and §3.20 Gateway Discovery Packets.
+ * Relevant requirements include MQTT-SN-3.6.1.2-1/-2,
+ * MQTT-SN-3.6.1.2.1-1, MQTT-SN-3.6.1.4-1/-2 and MQTT-SN-3.6.1.6-1.
+ */
 class OptionalPacketCodecTest {
 
   @Test
