@@ -25,6 +25,9 @@ import java.util.Objects;
 public final class MqttSnCodec {
   public static final int MAX_PACKET_SIZE = 65_535;
 
+  private static final String PACKET_ARGUMENT = "packet";
+  private static final String OPTIONS_ARGUMENT = "options";
+
   private MqttSnCodec() {
   }
 
@@ -97,7 +100,7 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodePublish(PublishOptions options) {
-    Objects.requireNonNull(options, "options");
+    Objects.requireNonNull(options, OPTIONS_ARGUMENT);
     byte[] topicName = options.topic().type() == TopicType.NAME
         ? options.topic().name().getBytes(StandardCharsets.UTF_8)
         : new byte[0];
@@ -131,7 +134,7 @@ public final class MqttSnCodec {
   }
 
   public static PublishPacket decodePublish(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.PUBLISH) {
       throw malformed("Expected PUBLISH");
     }
@@ -186,7 +189,7 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodeSubscribe(SubscribeOptions options) {
-    Objects.requireNonNull(options, "options");
+    Objects.requireNonNull(options, OPTIONS_ARGUMENT);
     byte[] topic = options.topic().type() == TopicType.NAME
         ? options.topic().name().getBytes(StandardCharsets.UTF_8)
         : new byte[2];
@@ -212,7 +215,7 @@ public final class MqttSnCodec {
   }
 
   public static SubAck decodeSubAck(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.SUBACK) {
       throw malformed("Expected SUBACK");
     }
@@ -286,7 +289,7 @@ public final class MqttSnCodec {
   }
 
   public static Ack decodeAck(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (!isAckType(packet.type())) {
       throw malformed("Unexpected acknowledgement type");
     }
@@ -312,7 +315,7 @@ public final class MqttSnCodec {
   }
 
   public static PingResp decodePingResp(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.PINGRESP) {
       throw malformed("Expected PINGRESP");
     }
@@ -338,7 +341,7 @@ public final class MqttSnCodec {
   }
 
   public static SleepResponse decodeSleepResp(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.SLEEPRESP) {
       throw malformed("Expected SLEEPRESP");
     }
@@ -389,7 +392,7 @@ public final class MqttSnCodec {
 
   public static ConnectionEncapsulation decodeConnectionEncapsulation(
       DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.CONNECTION_ENCAPSULATION) {
       throw malformed("Expected Connection Encapsulation");
     }
@@ -429,7 +432,7 @@ public final class MqttSnCodec {
 
   public static ForwarderEncapsulation decodeForwarderEncapsulation(
       DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.FORWARDER_ENCAPSULATION) {
       throw malformed("Expected Forwarder Encapsulation");
     }
@@ -479,7 +482,7 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodePubWos(PubWosPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     byte[] topicName = packet.topic().type() == TopicType.NAME
         ? packet.topic().name().getBytes(StandardCharsets.UTF_8)
         : new byte[0];
@@ -503,7 +506,7 @@ public final class MqttSnCodec {
   }
 
   public static PubWosPacket decodePubWos(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.PUBWOS) {
       throw malformed("Expected PUBWOS");
     }
@@ -543,7 +546,7 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodeAdvertise(AdvertisePacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     ByteBuffer body = ByteBuffer.allocate(3);
     body.put((byte) packet.gatewayIdentifier());
     body.putShort((short) packet.durationSeconds());
@@ -551,7 +554,7 @@ public final class MqttSnCodec {
   }
 
   public static AdvertisePacket decodeAdvertise(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.ADVERTISE || packet.body().remaining() != 3) {
       throw malformed("Invalid ADVERTISE packet");
     }
@@ -562,12 +565,12 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodeSearchGw(SearchGwPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     return encode(PacketType.SEARCHGW, packet.additionalNetworkInformation());
   }
 
   public static SearchGwPacket decodeSearchGw(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.SEARCHGW) {
       throw malformed("Expected SEARCHGW");
     }
@@ -577,7 +580,7 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodeGwInfo(GwInfoPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     byte[] address = packet.gatewayAddress();
     ByteBuffer body = ByteBuffer.allocate(1 + address.length);
     body.put((byte) packet.gatewayIdentifier());
@@ -586,7 +589,7 @@ public final class MqttSnCodec {
   }
 
   public static GwInfoPacket decodeGwInfo(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.GWINFO) {
       throw malformed("Expected GWINFO");
     }
@@ -614,7 +617,7 @@ public final class MqttSnCodec {
   }
 
   public static AuthPacket decodeAuth(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.AUTH) {
       throw malformed("Expected AUTH");
     }
@@ -643,7 +646,7 @@ public final class MqttSnCodec {
   }
 
   public static byte[] encodeDisconnect(DisconnectOptions options) {
-    Objects.requireNonNull(options, "options");
+    Objects.requireNonNull(options, OPTIONS_ARGUMENT);
 
     byte[] reasonString = options.reasonString().isEmpty()
         ? new byte[0]
@@ -681,7 +684,7 @@ public final class MqttSnCodec {
   }
 
   public static DisconnectPacket decodeDisconnect(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.DISCONNECT) {
       throw malformed("Expected DISCONNECT");
     }
@@ -755,7 +758,7 @@ public final class MqttSnCodec {
       ConnectOptions options,
       String authenticationMethod,
       byte[] authenticationData) {
-    Objects.requireNonNull(options, "options");
+    Objects.requireNonNull(options, OPTIONS_ARGUMENT);
 
     byte[] clientIdentifier = options.clientIdentifier().getBytes(StandardCharsets.UTF_8);
     boolean authenticated = authenticationMethod != null;
@@ -812,7 +815,7 @@ public final class MqttSnCodec {
   }
 
   public static ConnAck decodeConnAck(DecodedPacket packet) {
-    Objects.requireNonNull(packet, "packet");
+    Objects.requireNonNull(packet, PACKET_ARGUMENT);
     if (packet.type() != PacketType.CONNACK) {
       throw new MqttSnException(MqttSnError.MALFORMED_PACKET, "Expected CONNACK");
     }
