@@ -147,3 +147,26 @@ The adapter:
 - rejects an incomplete packet at a datagram boundary;
 - rejects datagrams from a peer other than the configured server;
 - performs no background retry, timer, or keep-alive scheduling.
+
+
+## Optional Bouncy Castle protection provider
+
+The core Java artifact remains crypto-backend-free. To use the standard CSD01
+Protection Schemes with the reference Bouncy Castle backend, add:
+
+```xml
+<dependency>
+  <groupId>io.mapsmessaging</groupId>
+  <artifactId>mqtt-sn-2-client-protection-bc</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
+The provider artifact depends on the core client and supplies the standard
+Protection Scheme implementations. A caller provides a key resolver so key
+selection can depend on the Protection Context/Sender Identifier rather than
+being hard-coded into the MQTT-SN library.
+
+The root Maven reactor builds and deploys both artifacts. On `main`, Buildkite
+publishes both snapshot artifacts to the standard MAPS `maps_snapshots`
+repository.
