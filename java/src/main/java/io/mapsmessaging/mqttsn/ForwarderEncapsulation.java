@@ -18,6 +18,8 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+
 public record ForwarderEncapsulation(byte[] clientAddressingInformation, byte[] mqttSnPacket) {
   public ForwarderEncapsulation {
     clientAddressingInformation =
@@ -36,5 +38,26 @@ public record ForwarderEncapsulation(byte[] clientAddressingInformation, byte[] 
   @Override
   public byte[] mqttSnPacket() {
     return mqttSnPacket.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof ForwarderEncapsulation packet
+        && Arrays.equals(clientAddressingInformation, packet.clientAddressingInformation)
+        && Arrays.equals(mqttSnPacket, packet.mqttSnPacket);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Arrays.hashCode(clientAddressingInformation)
+        + Arrays.hashCode(mqttSnPacket);
+  }
+
+  @Override
+  public String toString() {
+    return "ForwarderEncapsulation[clientAddressingInformation="
+        + Arrays.toString(clientAddressingInformation)
+        + ", mqttSnPacket=" + Arrays.toString(mqttSnPacket) + "]";
   }
 }
