@@ -12,6 +12,7 @@ from .codec import (
 from .client import Client
 from .packets import (
     Ack,
+    AuthPacket,
     DisconnectOptions,
     DisconnectPacket,
     PingResp,
@@ -25,12 +26,14 @@ from .packets import (
     TopicRef,
     TopicType,
     decode_ack,
+    decode_auth,
     decode_disconnect,
     decode_pingresp,
     decode_publish,
     decode_sleepresp,
     decode_suback,
     encode_ack,
+    encode_auth,
     encode_disconnect,
     encode_pingreq,
     encode_publish,
@@ -43,6 +46,7 @@ from .packets import (
 
 __all__ = [
     "Ack",
+    "AuthPacket",
     "DisconnectOptions",
     "DisconnectPacket",
     "Client",
@@ -62,6 +66,7 @@ __all__ = [
     "TopicRef",
     "TopicType",
     "decode_ack",
+    "decode_auth",
     "decode_disconnect",
     "decode_connack",
     "decode_packet",
@@ -70,6 +75,7 @@ __all__ = [
     "decode_sleepresp",
     "decode_suback",
     "encode_ack",
+    "encode_auth",
     "encode_disconnect",
     "encode_connect",
     "encode_packet",
