@@ -212,6 +212,9 @@ public final class MqttSnCodec {
     }
 
     int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    if (packetIdentifier == 0) {
+      throw malformed("SUBACK Packet Identifier must be non-zero");
+    }
     Integer topicAlias = null;
     if ((flags & 0x04) != 0) {
       requireRemaining(body, 2, "SUBACK Topic Alias");
@@ -408,6 +411,11 @@ public final class MqttSnCodec {
 
     boolean sessionPresent = (flags & 0x01) != 0;
     int packetIdentifier = Short.toUnsignedInt(body.getShort());
+    if (packetIdentifier == 0) {
+      throw new MqttSnException(
+          MqttSnError.MALFORMED_PACKET,
+          "CONNACK Packet Identifier must be non-zero");
+    }
     int reasonCode = Byte.toUnsignedInt(body.get());
     if (sessionPresent && reasonCode != 0) {
       throw new MqttSnException(
