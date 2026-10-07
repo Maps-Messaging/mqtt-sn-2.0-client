@@ -351,6 +351,90 @@ public final class MqttSnCodec {
     return new SleepResponse(packetIdentifier, duration, reasonCode);
   }
 
+
+  public static byte[] encodeDisconnect(DisconnectOptions options) {
+    Objects.requireNonNull(options, "options");
+
+    byte[] reasonString = options.reasonString().isEmpty()
+        ? new byte[0]
+        : options.reasonString().getBytes(StandardCharsets.UTF_8);
+
+    int flags = 0;
+    int bodyLength = 1 + reasonString.length;
+    if (options.packetIdentifier() != null) {
+      flags |= 0x01;
+      bodyLength += 2;
+    }
+    if (options.sessionExpiryInterval() != null) {
+      flags |= 0x02;
+      bodyLength += 4;
+    }
+    if (options.reasonCode() != null) {
+      flags |= 0x04;
+      bodyLength += 1;
+    }
+
+    ByteBuffer body = ByteBuffer.allocate(bodyLength);
+    body.put((byte) flags);
+    if (options.packetIdentifier() != null) {
+      body.putShort((short) options.packetIdentifier().intValue());
+    }
+    if (options.reasonCode() != null) {
+      body.put((byte) options.reasonCode().intValue());
+    }
+    if (options.sessionExpiryInterval() != null) {
+      body.putInt((int) options.sessionExpiryInterval().longValue());
+    }
+    body.put(reasonString);
+
+    return encode(PacketType.DISCONNECT, body.array());
+  }
+
+  public static DisconnectPacket decodeDisconnect(DecodedPacket packet) {
+    Objects.requireNonNull(packet, "packet");
+    if (packet.type() != PacketType.DISCONNECT) {
+      throw malformed("Expected DISCONNECT");
+    }
+
+    ByteBuffer body = packet.body().asReadOnlyBuffer();
+    requireRemaining(body, 1, "DISCONNECT Flags");
+
+    int flags = Byte.toUnsignedInt(body.get());
+    if ((flags & 0xF8) != 0) {
+      throw malformed("DISCONNECT reserved flags are non-zero");
+    }
+
+    Integer packetIdentifier = null;
+    Integer reasonCode = null;
+    Long sessionExpiryInterval = null;
+
+    if ((flags & 0x01) != 0) {
+      requireRemaining(body, 2, "DISCONNECT Packet Identifier");
+      packetIdentifier = Short.toUnsignedInt(body.getShort());
+      if (packetIdentifier == 0) {
+        throw malformed("DISCONNECT Packet Identifier must be non-zero");
+      }
+    }
+
+    if ((flags & 0x04) != 0) {
+      requireRemaining(body, 1, "DISCONNECT Reason Code");
+      reasonCode = Byte.toUnsignedInt(body.get());
+    }
+
+    if ((flags & 0x02) != 0) {
+      requireRemaining(body, 4, "DISCONNECT Session Expiry Interval");
+      sessionExpiryInterval = Integer.toUnsignedLong(body.getInt());
+    }
+
+    String reasonString = body.hasRemaining() ? MqttSnUtf8.decode(body) : "";
+
+    return new DisconnectPacket(
+        packetIdentifier,
+        reasonCode,
+        sessionExpiryInterval,
+        reasonString);
+  }
+
   public static byte[] encodeWakeup() {
     return encode(PacketType.WAKEUP, new byte[0]);
   }
