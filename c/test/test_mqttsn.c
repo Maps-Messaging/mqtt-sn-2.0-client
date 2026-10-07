@@ -575,6 +575,64 @@ static void test_ack_types_and_wakeup(void) {
   assert(output[1] == MQTTSN_WAKEUP);
 }
 
+
+static void test_disconnect_codec(void) {
+  const uint8_t reason[] = "protocol error";
+  mqttsn_disconnect_options_t options = {
+      .has_packet_identifier = 1u,
+      .packet_identifier = 0x1234u,
+      .has_reason_code = 1u,
+      .reason_code = 0x82u,
+      .has_session_expiry_interval = 1u,
+      .session_expiry_interval = 3600u,
+      .reason_string = reason,
+      .reason_string_length = sizeof(reason) - 1u
+  };
+  uint8_t output[64];
+  size_t written = 0u;
+  size_t consumed = 0u;
+  mqttsn_packet_view_t packet;
+  mqttsn_disconnect_view_t decoded;
+
+  assert(mqttsn_encode_disconnect(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(mqttsn_decode_packet(
+      output, written, &packet, &consumed) == MQTTSN_OK);
+  assert(mqttsn_decode_disconnect(&packet, &decoded) == MQTTSN_OK);
+  assert(decoded.has_packet_identifier == 1u);
+  assert(decoded.packet_identifier == 0x1234u);
+  assert(decoded.has_reason_code == 1u);
+  assert(decoded.reason_code == 0x82u);
+  assert(decoded.has_session_expiry_interval == 1u);
+  assert(decoded.session_expiry_interval == 3600u);
+  assert(decoded.reason_string_length == sizeof(reason) - 1u);
+  assert(memcmp(decoded.reason_string, reason, sizeof(reason) - 1u) == 0);
+
+  memset(&options, 0, sizeof(options));
+  assert(mqttsn_encode_disconnect(
+      &options, output, sizeof(output), &written) == MQTTSN_OK);
+  assert(written == 3u);
+  assert(output[0] == 0x03u);
+  assert(output[1] == MQTTSN_DISCONNECT);
+  assert(output[2] == 0x00u);
+
+  {
+    const uint8_t reserved[] = {0x03, MQTTSN_DISCONNECT, 0x80};
+    assert(mqttsn_decode_packet(
+        reserved, sizeof(reserved), &packet, &consumed) == MQTTSN_OK);
+    assert(mqttsn_decode_disconnect(&packet, &decoded) == MQTTSN_MALFORMED_PACKET);
+  }
+
+  {
+    const uint8_t zero_id[] = {
+        0x05, MQTTSN_DISCONNECT, 0x01, 0x00, 0x00
+    };
+    assert(mqttsn_decode_packet(
+        zero_id, sizeof(zero_id), &packet, &consumed) == MQTTSN_OK);
+    assert(mqttsn_decode_disconnect(&packet, &decoded) == MQTTSN_MALFORMED_PACKET);
+  }
+}
+
 int main(void) {
   test_packet_types();
   test_short_frame();
@@ -596,5 +654,6 @@ int main(void) {
   test_publish_qos_and_alias_variants();
   test_suback_zero_identifier_is_rejected();
   test_ack_types_and_wakeup();
+  test_disconnect_codec();
   return 0;
 }
