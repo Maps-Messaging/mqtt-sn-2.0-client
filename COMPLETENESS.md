@@ -4,7 +4,9 @@ This matrix is intentionally conservative. A packet being present in the packet-
 catalogue or supported by the generic frame encoder does **not** mean its packet-specific
 fields and operational behaviour are implemented.
 
-Specification baseline: MQTT-SN 2.0 CSD01, 14 August 2026.\n\nSee also [PROTECTION.md](PROTECTION.md) for the pluggable Protection Encapsulation architecture.
+Specification baseline: MQTT-SN 2.0 CSD01, 14 August 2026.
+
+See also [PROTECTION.md](PROTECTION.md) for the pluggable Protection Encapsulation architecture.
 
 Legend:
 
@@ -52,7 +54,7 @@ Legend:
 | Keep-alive timer scheduler | Caller-driven timer | Wrapped | Caller-driven timer | Caller-driven timer | Shared C |
 | Session persistence | Missing | Missing | Missing | Missing | Missing |
 | Authentication exchange state | Partial/generic | Missing | Missing | Missing | Partial/generic |
-| Protection cryptography | Provider extension | Provider extension | Provider extension | Provider extension | Provider extension |
+| Protection cryptography | Optional OpenSSL provider | Wrapped OpenSSL provider | Optional Bouncy Castle provider | Optional pyca/cryptography provider | Provider ABI only |
 | Gateway discovery behaviour | Codec foundation | Wrapped | Codec foundation | Codec foundation | Shared C |
 
 ## Test coverage structure
@@ -67,7 +69,8 @@ Legend:
 - acknowledgements;
 - PING and SLEEP;
 - client state and flow-control transitions;
-- retry exhaustion and packet identifier allocation.
+- retry exhaustion and packet identifier allocation;
+- OpenSSL standard protection-provider vectors when OpenSSL 3 is available.
 
 ### C++
 
@@ -90,13 +93,14 @@ JUnit tests cover:
 - SUBSCRIBE/SUBACK;
 - common acknowledgements;
 - PING, SLEEP and WAKEUP;
-- UTF-8 and topic wildcard rules.
+- UTF-8 and topic wildcard rules;
+- Protection Encapsulation structure and all 15 standard Bouncy Castle provider scheme vectors.
 
 ### Python
 
 Pytest mirrors the Java/C wire-level boundary, malformed-input, topic, QoS, acknowledgement,
 PING, SLEEP, AUTH, DISCONNECT, PUBWOS, gateway discovery, encapsulation, timers and
-client state/flow cases.
+client state/flow cases, Protection Encapsulation and all 15 standard pyca/cryptography provider scheme vectors.
 
 ### Arduino
 
@@ -114,8 +118,8 @@ At minimum, the following remain required:
 4. complete AUTH exchange semantics and applicable reason-code validation;
 5. complete applicable reason-code and session-expiry validation for DISCONNECT;
 6. higher-level gateway discovery behaviour where required by the test client;
-7. concrete Protection Providers for the required CSD01 schemes and their specification vectors;
-8. protection scheme implementation/tests where required for claimed conformance;
+7. board-specific embedded Protection Providers where required;
+8. provider-defined protection schemes only where a deployment needs them;
 9. requirement-by-requirement traceability in `shared/requirements.json`;
 10. integration/conformance tests runnable against MapsMessaging without MapsMessaging-specific expected behaviour.
 
