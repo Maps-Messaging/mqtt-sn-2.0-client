@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn.protection;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record ProtectionEnvelope(
     int scheme,
     int tagLengthCode,
@@ -47,4 +50,38 @@ public record ProtectionEnvelope(
   @Override public byte[] cryptographicMaterial() { return cryptographicMaterial.clone(); }
   @Override public byte[] monotonicCounter() { return monotonicCounter.clone(); }
   @Override public byte[] mqttSnPacket() { return mqttSnPacket.clone(); }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof ProtectionEnvelope envelope
+        && scheme == envelope.scheme
+        && tagLengthCode == envelope.tagLengthCode
+        && Arrays.equals(senderIdentifier, envelope.senderIdentifier)
+        && Arrays.equals(random, envelope.random)
+        && Arrays.equals(cryptographicMaterial, envelope.cryptographicMaterial)
+        && Arrays.equals(monotonicCounter, envelope.monotonicCounter)
+        && Arrays.equals(mqttSnPacket, envelope.mqttSnPacket);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Objects.hash(scheme, tagLengthCode);
+    result = 31 * result + Arrays.hashCode(senderIdentifier);
+    result = 31 * result + Arrays.hashCode(random);
+    result = 31 * result + Arrays.hashCode(cryptographicMaterial);
+    result = 31 * result + Arrays.hashCode(monotonicCounter);
+    return 31 * result + Arrays.hashCode(mqttSnPacket);
+  }
+
+  @Override
+  public String toString() {
+    return "ProtectionEnvelope[scheme=" + scheme
+        + ", tagLengthCode=" + tagLengthCode
+        + ", senderIdentifier=" + Arrays.toString(senderIdentifier)
+        + ", random=" + Arrays.toString(random)
+        + ", cryptographicMaterial=" + Arrays.toString(cryptographicMaterial)
+        + ", monotonicCounter=" + Arrays.toString(monotonicCounter)
+        + ", mqttSnPacket=" + Arrays.toString(mqttSnPacket) + "]";
+  }
 }
