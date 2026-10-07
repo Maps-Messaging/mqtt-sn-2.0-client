@@ -86,8 +86,172 @@ struct ConnAckView {
   std::string_view assignedClientIdentifier;
 };
 
+
+struct PubWosPacket {
+  bool retain{false};
+  mqttsn_topic_type_t topicType{MQTTSN_TOPIC_NAME};
+  std::uint16_t topicAlias{};
+  std::string_view topicName{};
+  std::span<const std::uint8_t> payload{};
+};
+
+struct AdvertisePacket {
+  std::uint8_t gatewayIdentifier{};
+  std::uint16_t durationSeconds{};
+};
+
+struct SearchGwPacket {
+  std::span<const std::uint8_t> additionalNetworkInformation{};
+};
+
+struct GwInfoPacket {
+  std::uint8_t gatewayIdentifier{};
+  std::span<const std::uint8_t> gatewayAddress{};
+};
+
 class Codec {
  public:
+
+
+  static std::vector<std::uint8_t> encodePubWos(const PubWosPacket& packet) {
+    mqttsn_pubwos_t native{};
+    native.retain = static_cast<std::uint8_t>(packet.retain);
+    native.topic.type = packet.topicType;
+    native.topic.alias = packet.topicAlias;
+    native.topic.name = reinterpret_cast<const std::uint8_t*>(packet.topicName.data());
+    native.topic.name_length = packet.topicName.size();
+    native.payload = packet.payload.data();
+    native.payload_length = packet.payload.size();
+
+    const std::size_t capacity =
+        7u + packet.topicName.size() + packet.payload.size();
+    std::vector<std::uint8_t> output(capacity);
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_pubwos(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static PubWosPacket decodePubWos(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_pubwos_t native{};
+    const auto status = mqttsn_decode_pubwos(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return PubWosPacket{
+        native.retain != 0,
+        native.topic.type,
+        native.topic.alias,
+        std::string_view(
+            reinterpret_cast<const char*>(native.topic.name),
+            native.topic.name_length),
+        std::span<const std::uint8_t>(native.payload, native.payload_length)};
+  }
+
+  static std::vector<std::uint8_t> encodeAdvertise(const AdvertisePacket& packet) {
+    const mqttsn_advertise_t native{
+        packet.gatewayIdentifier, packet.durationSeconds};
+    std::vector<std::uint8_t> output(5u);
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_advertise(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static AdvertisePacket decodeAdvertise(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_advertise_t native{};
+    const auto status = mqttsn_decode_advertise(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return AdvertisePacket{native.gateway_identifier, native.duration};
+  }
+
+  static std::vector<std::uint8_t> encodeSearchGw(const SearchGwPacket& packet) {
+    const mqttsn_searchgw_t native{
+        packet.additionalNetworkInformation.data(),
+        packet.additionalNetworkInformation.size()};
+    std::vector<std::uint8_t> output(4u + packet.additionalNetworkInformation.size());
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_searchgw(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static SearchGwPacket decodeSearchGw(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_searchgw_t native{};
+    const auto status = mqttsn_decode_searchgw(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return SearchGwPacket{std::span<const std::uint8_t>(
+        native.additional_network_information,
+        native.additional_network_information_length)};
+  }
+
+  static std::vector<std::uint8_t> encodeGwInfo(const GwInfoPacket& packet) {
+    const mqttsn_gwinfo_t native{
+        packet.gatewayIdentifier,
+        packet.gatewayAddress.data(),
+        packet.gatewayAddress.size()};
+    std::vector<std::uint8_t> output(5u + packet.gatewayAddress.size());
+    std::size_t written = 0;
+    const auto status = mqttsn_encode_gwinfo(
+        &native, output.data(), output.size(), &written);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    output.resize(written);
+    return output;
+  }
+
+  static GwInfoPacket decodeGwInfo(const PacketView& packet) {
+    const mqttsn_packet_view_t nativePacket{
+        static_cast<mqttsn_packet_type_t>(packet.type),
+        packet.body.data(),
+        packet.body.size(),
+        packet.packetLength,
+        packet.headerLength};
+    mqttsn_gwinfo_t native{};
+    const auto status = mqttsn_decode_gwinfo(&nativePacket, &native);
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+    return GwInfoPacket{
+        native.gateway_identifier,
+        std::span<const std::uint8_t>(
+            native.gateway_address, native.gateway_address_length)};
+  }
 
   static std::vector<std::uint8_t> encodeConnect(const ConnectOptions& options) {
     const mqttsn_connect_options_t native{
