@@ -62,7 +62,7 @@ network / radio / serial
 | Java | Independent reference client | None |
 | Python | Independent reference client | None |
 
-## Conformance rules
+See [COMPLETENESS.md](COMPLETENESS.md) for the current per-language implementation and test matrix.\n\n## Conformance rules
 
 Every conformance test must identify the MQTT-SN specification requirement or section that establishes the expected result.
 
