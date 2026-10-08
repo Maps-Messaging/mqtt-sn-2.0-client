@@ -26,6 +26,7 @@ java/          Java core implementation
 java-bouncycastle/ Optional Bouncy Castle protection provider
 python/        Python implementation
 shared/        Language-neutral specification data and conformance vectors
+wireshark/     Standalone MQTT-SN 2.0 Lua dissector, capture tests and examples
 SPECIFICATION.md  Exact normative draft baseline
 ```
 
@@ -72,6 +73,7 @@ See [COMPLETENESS.md](COMPLETENESS.md) for the current per-language implementati
 - [Conformance status](docs/CONFORMANCE.md)
 - [Specification baseline](SPECIFICATION.md)
 - [Protection providers](PROTECTION.md)
+- [Wireshark dissector and installation](wireshark/README.md)
 - [C guide](c/README.md)
 - [C++ guide](cpp/README.md)
 - [Java guide](java/README.md)

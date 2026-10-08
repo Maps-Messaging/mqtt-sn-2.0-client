@@ -67,3 +67,27 @@ jobs:
       - name: Compile buffer client example
         run: |
           arduino-cli compile             --fqbn arduino:avr:uno             --library arduino             arduino/examples/BufferClient
+
+  wireshark:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        container: ["ubuntu:24.04", "debian:trixie"]
+    container: ${{ matrix.container }}
+    steps:
+      - name: Install capture test tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 tshark
+          # Containers run as root; enable scripts only in this test container.
+          lua_dir=$(tshark -G folders | sed -n 's/^Global Lua Plugins:[[:space:]]*//p')
+          test -n "$lua_dir"
+          mkdir -p "$lua_dir"
+          printf '%s\n' 'run_user_scripts_when_superuser = true' > "$lua_dir/init.lua"
+          tshark --version
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Test MQTT-SN 2.0 dissector with tshark
+        run: python3 -m unittest discover -s wireshark/tests -v
