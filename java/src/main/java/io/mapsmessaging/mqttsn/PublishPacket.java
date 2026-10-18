@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record PublishPacket(
     QoS qos,
     boolean duplicate,
@@ -33,5 +36,33 @@ public record PublishPacket(
   @Override
   public byte[] payload() {
     return payload.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof PublishPacket packet
+        && duplicate == packet.duplicate
+        && retain == packet.retain
+        && packetIdentifier == packet.packetIdentifier
+        && qos == packet.qos
+        && Objects.equals(topic, packet.topic)
+        && Arrays.equals(payload, packet.payload);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Objects.hash(qos, duplicate, retain, packetIdentifier, topic)
+        + Arrays.hashCode(payload);
+  }
+
+  @Override
+  public String toString() {
+    return "PublishPacket[qos=" + qos
+        + ", duplicate=" + duplicate
+        + ", retain=" + retain
+        + ", packetIdentifier=" + packetIdentifier
+        + ", topic=" + topic
+        + ", payload=" + Arrays.toString(payload) + "]";
   }
 }

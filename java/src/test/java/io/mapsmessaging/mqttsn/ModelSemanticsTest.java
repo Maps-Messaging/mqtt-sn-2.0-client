@@ -35,7 +35,8 @@ class ModelSemanticsTest {
     DecodedPacket packet = new DecodedPacket(PacketType.PUBLISH, source, 5, 2);
 
     assertTrue(packet.body().isReadOnly());
-    assertThrows(ReadOnlyBufferException.class, () -> packet.body().put((byte) 9));
+    ByteBuffer readOnlyBody = packet.body();
+    assertThrows(ReadOnlyBufferException.class, () -> readOnlyBody.put((byte) 9));
 
     ByteBuffer first = packet.body();
     first.get();

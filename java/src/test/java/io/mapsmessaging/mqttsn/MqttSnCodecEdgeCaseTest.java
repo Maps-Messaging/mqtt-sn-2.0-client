@@ -226,37 +226,42 @@ class MqttSnCodecEdgeCaseTest {
   }
 
   private static void assertError(MqttSnError expected, byte[] packet) {
+    ByteBuffer input = ByteBuffer.wrap(packet);
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decode(ByteBuffer.wrap(packet)));
+        () -> MqttSnCodec.decode(input));
     assertEquals(expected, error.error());
   }
 
   private static void assertConnAckMalformed(byte[] bytes) {
+    DecodedPacket packet = MqttSnCodec.decode(ByteBuffer.wrap(bytes));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodeConnAck(MqttSnCodec.decode(ByteBuffer.wrap(bytes))));
+        () -> MqttSnCodec.decodeConnAck(packet));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 
   private static void assertPublishMalformed(byte[] bytes) {
+    DecodedPacket packet = MqttSnCodec.decode(ByteBuffer.wrap(bytes));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodePublish(MqttSnCodec.decode(ByteBuffer.wrap(bytes))));
+        () -> MqttSnCodec.decodePublish(packet));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 
   private static void assertSubAckMalformed(byte[] bytes) {
+    DecodedPacket packet = MqttSnCodec.decode(ByteBuffer.wrap(bytes));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodeSubAck(MqttSnCodec.decode(ByteBuffer.wrap(bytes))));
+        () -> MqttSnCodec.decodeSubAck(packet));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 
   private static void assertSleepRespMalformed(byte[] bytes) {
+    DecodedPacket packet = MqttSnCodec.decode(ByteBuffer.wrap(bytes));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodeSleepResp(MqttSnCodec.decode(ByteBuffer.wrap(bytes))));
+        () -> MqttSnCodec.decodeSleepResp(packet));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 }

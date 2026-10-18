@@ -18,6 +18,8 @@
 
 package io.mapsmessaging.mqttsn.protection;
 
+import java.util.Arrays;
+
 public record ProtectedContent(byte[] protectedPacket, byte[] authenticationTag) {
   public ProtectedContent {
     protectedPacket = protectedPacket == null ? new byte[0] : protectedPacket.clone();
@@ -32,5 +34,24 @@ public record ProtectedContent(byte[] protectedPacket, byte[] authenticationTag)
   @Override
   public byte[] authenticationTag() {
     return authenticationTag.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof ProtectedContent content
+        && Arrays.equals(protectedPacket, content.protectedPacket)
+        && Arrays.equals(authenticationTag, content.authenticationTag);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Arrays.hashCode(protectedPacket) + Arrays.hashCode(authenticationTag);
+  }
+
+  @Override
+  public String toString() {
+    return "ProtectedContent[protectedPacket=" + Arrays.toString(protectedPacket)
+        + ", authenticationTag=" + Arrays.toString(authenticationTag) + "]";
   }
 }

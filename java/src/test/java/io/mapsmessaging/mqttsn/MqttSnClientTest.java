@@ -62,9 +62,10 @@ class MqttSnClientTest {
   void propagatesProtocolErrorsRatherThanTreatingThemAsPartialData() {
     ByteBuffer input = ByteBuffer.wrap(new byte[] {0x02, (byte) 0xFD});
 
+    MqttSnClient client = new MqttSnClient();
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> new MqttSnClient().accept(input, packet -> { }));
+        () -> client.accept(input, packet -> { }));
 
     assertEquals(MqttSnError.RESERVED_TYPE, error.error());
   }

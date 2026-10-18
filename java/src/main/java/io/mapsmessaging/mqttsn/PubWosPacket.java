@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record PubWosPacket(boolean retain, TopicRef topic, byte[] payload) {
   public PubWosPacket {
     if (topic == null) {
@@ -35,5 +38,26 @@ public record PubWosPacket(boolean retain, TopicRef topic, byte[] payload) {
   @Override
   public byte[] payload() {
     return payload.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof PubWosPacket packet
+        && retain == packet.retain
+        && Objects.equals(topic, packet.topic)
+        && Arrays.equals(payload, packet.payload);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Objects.hash(retain, topic) + Arrays.hashCode(payload);
+  }
+
+  @Override
+  public String toString() {
+    return "PubWosPacket[retain=" + retain
+        + ", topic=" + topic
+        + ", payload=" + Arrays.toString(payload) + "]";
   }
 }
