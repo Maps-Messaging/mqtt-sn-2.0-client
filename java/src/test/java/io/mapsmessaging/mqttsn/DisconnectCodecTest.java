@@ -58,9 +58,10 @@ class DisconnectCodecTest {
   }
 
   private static void assertMalformed(byte[] bytes) {
+    DecodedPacket packet = MqttSnCodec.decode(ByteBuffer.wrap(bytes));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodeDisconnect(MqttSnCodec.decode(ByteBuffer.wrap(bytes))));
+        () -> MqttSnCodec.decodeDisconnect(packet));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 }

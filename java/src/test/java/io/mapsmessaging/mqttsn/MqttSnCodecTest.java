@@ -59,9 +59,10 @@ class MqttSnCodecTest {
 
   @Test
   void rejectsReservedPacketType() {
+    ByteBuffer input = ByteBuffer.wrap(new byte[] {0x02, (byte) 0xFD});
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decode(ByteBuffer.wrap(new byte[] {0x02, (byte) 0xFD})));
+        () -> MqttSnCodec.decode(input));
     assertEquals(MqttSnError.RESERVED_TYPE, error.error());
   }
 

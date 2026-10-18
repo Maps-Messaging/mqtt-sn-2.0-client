@@ -60,15 +60,16 @@ class OptionalPacketCodecTest {
 
   @Test
   void pubWosRejectsSessionAliasAndReservedFlags() {
+    TopicRef sessionAlias = TopicRef.sessionAlias(1);
     assertThrows(
         IllegalArgumentException.class,
-        () -> new PubWosPacket(false, TopicRef.sessionAlias(1), new byte[0]));
+        () -> new PubWosPacket(false, sessionAlias, new byte[0]));
 
+    DecodedPacket encoded = MqttSnCodec.decode(ByteBuffer.wrap(
+        new byte[] {0x05, 0x12, 0x20, 0x00, 0x01}));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodePubWos(
-            MqttSnCodec.decode(ByteBuffer.wrap(
-                new byte[] {0x05, 0x12, 0x20, 0x00, 0x01}))));
+        () -> MqttSnCodec.decodePubWos(encoded));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 

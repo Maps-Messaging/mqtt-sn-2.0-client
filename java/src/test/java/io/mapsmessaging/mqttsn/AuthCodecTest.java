@@ -49,9 +49,10 @@ class AuthCodecTest {
   }
 
   private static void assertMalformed(byte[] bytes) {
+    DecodedPacket packet = MqttSnCodec.decode(ByteBuffer.wrap(bytes));
     MqttSnException error = assertThrows(
         MqttSnException.class,
-        () -> MqttSnCodec.decodeAuth(MqttSnCodec.decode(ByteBuffer.wrap(bytes))));
+        () -> MqttSnCodec.decodeAuth(packet));
     assertEquals(MqttSnError.MALFORMED_PACKET, error.error());
   }
 }

@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn.protection;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record ProtectionContext(
     int scheme,
     int tagLengthCode,
@@ -40,4 +43,38 @@ public record ProtectionContext(
   @Override public byte[] cryptographicMaterial() { return cryptographicMaterial.clone(); }
   @Override public byte[] monotonicCounter() { return monotonicCounter.clone(); }
   @Override public byte[] authenticatedPrefix() { return authenticatedPrefix.clone(); }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof ProtectionContext context
+        && scheme == context.scheme
+        && tagLengthCode == context.tagLengthCode
+        && Arrays.equals(senderIdentifier, context.senderIdentifier)
+        && Arrays.equals(random, context.random)
+        && Arrays.equals(cryptographicMaterial, context.cryptographicMaterial)
+        && Arrays.equals(monotonicCounter, context.monotonicCounter)
+        && Arrays.equals(authenticatedPrefix, context.authenticatedPrefix);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Objects.hash(scheme, tagLengthCode);
+    result = 31 * result + Arrays.hashCode(senderIdentifier);
+    result = 31 * result + Arrays.hashCode(random);
+    result = 31 * result + Arrays.hashCode(cryptographicMaterial);
+    result = 31 * result + Arrays.hashCode(monotonicCounter);
+    return 31 * result + Arrays.hashCode(authenticatedPrefix);
+  }
+
+  @Override
+  public String toString() {
+    return "ProtectionContext[scheme=" + scheme
+        + ", tagLengthCode=" + tagLengthCode
+        + ", senderIdentifier=" + Arrays.toString(senderIdentifier)
+        + ", random=" + Arrays.toString(random)
+        + ", cryptographicMaterial=" + Arrays.toString(cryptographicMaterial)
+        + ", monotonicCounter=" + Arrays.toString(monotonicCounter)
+        + ", authenticatedPrefix=" + Arrays.toString(authenticatedPrefix) + "]";
+  }
 }

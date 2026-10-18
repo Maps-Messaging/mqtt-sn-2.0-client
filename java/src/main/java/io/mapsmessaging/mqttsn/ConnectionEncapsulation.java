@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record ConnectionEncapsulation(String clientIdentifier, byte[] mqttSnPacket) {
   public ConnectionEncapsulation {
     clientIdentifier = clientIdentifier == null ? "" : clientIdentifier;
@@ -32,5 +35,24 @@ public record ConnectionEncapsulation(String clientIdentifier, byte[] mqttSnPack
   @Override
   public byte[] mqttSnPacket() {
     return mqttSnPacket.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof ConnectionEncapsulation packet
+        && Objects.equals(clientIdentifier, packet.clientIdentifier)
+        && Arrays.equals(mqttSnPacket, packet.mqttSnPacket);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Objects.hash(clientIdentifier) + Arrays.hashCode(mqttSnPacket);
+  }
+
+  @Override
+  public String toString() {
+    return "ConnectionEncapsulation[clientIdentifier=" + clientIdentifier
+        + ", mqttSnPacket=" + Arrays.toString(mqttSnPacket) + "]";
   }
 }

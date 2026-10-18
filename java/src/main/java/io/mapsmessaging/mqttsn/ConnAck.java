@@ -18,6 +18,9 @@
 
 package io.mapsmessaging.mqttsn;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record ConnAck(
     boolean sessionPresent,
     int packetIdentifier,
@@ -35,5 +38,44 @@ public record ConnAck(
   @Override
   public byte[] authenticationData() {
     return authenticationData == null ? null : authenticationData.clone();
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    return this == other
+        || other instanceof ConnAck packet
+        && sessionPresent == packet.sessionPresent
+        && packetIdentifier == packet.packetIdentifier
+        && reasonCode == packet.reasonCode
+        && Objects.equals(sessionExpiryInterval, packet.sessionExpiryInterval)
+        && Objects.equals(serverKeepAlive, packet.serverKeepAlive)
+        && Objects.equals(authenticationMethod, packet.authenticationMethod)
+        && Arrays.equals(authenticationData, packet.authenticationData)
+        && Objects.equals(assignedClientIdentifier, packet.assignedClientIdentifier);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * Objects.hash(
+        sessionPresent,
+        packetIdentifier,
+        reasonCode,
+        sessionExpiryInterval,
+        serverKeepAlive,
+        authenticationMethod,
+        assignedClientIdentifier)
+        + Arrays.hashCode(authenticationData);
+  }
+
+  @Override
+  public String toString() {
+    return "ConnAck[sessionPresent=" + sessionPresent
+        + ", packetIdentifier=" + packetIdentifier
+        + ", reasonCode=" + reasonCode
+        + ", sessionExpiryInterval=" + sessionExpiryInterval
+        + ", serverKeepAlive=" + serverKeepAlive
+        + ", authenticationMethod=" + authenticationMethod
+        + ", authenticationData=" + Arrays.toString(authenticationData)
+        + ", assignedClientIdentifier=" + assignedClientIdentifier + "]";
   }
 }
