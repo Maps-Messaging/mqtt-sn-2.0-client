@@ -8,7 +8,7 @@ The Java client is a transport-neutral reference implementation of MQTT-SN 2.0 i
 <dependency>
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
@@ -25,47 +25,30 @@ mvn clean verify
 The primary JAR is written to:
 
 ```text
-java/target/mqtt-sn-2-client-0.1.0-SNAPSHOT.jar
+java/target/mqtt-sn-2-client-0.1.0.jar
 ```
 
 The build also creates source and Javadoc JARs.
 
-## Publish a snapshot
+## Maven publication
 
-The project uses the standard MAPS Maven repositories:
+Published Java releases use Maven Central. The 0.1.0 release consists of the parent POM, core client and optional Bouncy Castle protection provider, with signed JAR, sources and Javadoc artifacts for both modules.
+
+The release pipeline `.buildkite/pipeline_release.yml` runs the full Maven build and tests on `java_build_queue_aws`, then publishes with the `release` Maven profile. Release builds must use a `release-*` branch and non-SNAPSHOT module versions. Central publishing credentials and a signing key are required.
+
+Development snapshots continue to publish to the standard MapsMessaging Nexus repository:
 
 ```text
-Snapshots: https://repository.mapsmessaging.io/repository/maps_snapshots/
-Releases:  https://repository.mapsmessaging.io/repository/maps_releases/
+https://repository.mapsmessaging.io/repository/maps_snapshots/
 ```
 
-No Maven Central/Sonatype publication is used for this project.
-
-Maven credentials are resolved using the standard MAPS server ids `maps_snapshots` and `maps_releases`. Configure the credentials you use for those repositories in `~/.m2/settings.xml`. For the current `0.1.0-SNAPSHOT` build, Maven deploys to `maps_snapshots`:
-
-```xml
-<settings>
-  <servers>
-    <server>
-      <id>maps_snapshots</id>
-      <username>YOUR_USERNAME</username>
-      <password>YOUR_PASSWORD</password>
-    </server>
-  </servers>
-</settings>
-```
-
-Then publish from the repository root:
+On a development branch with SNAPSHOT Maven versions, run:
 
 ```bash
-mvn clean deploy
+mvn --batch-mode clean deploy
 ```
 
-This deploys the parent POM and:
-
-```text
-io.mapsmessaging:mqtt-sn-2-client:0.1.0-SNAPSHOT
-```
+The snapshot repository uses the Maven server ID `maps_snapshots`. This command is not a Maven Central release.
 
 ## Transport model
 
@@ -84,27 +67,9 @@ This records the exact OASIS draft and source commit against which the client wa
 
 ## Buildkite
 
-The repository includes `.buildkite/pipeline.yaml` using the standard MAPS
-`java_build_queue_aws` queue.
+`.buildkite/pipeline.yaml` verifies the Java reactor and publishes SNAPSHOTs to MapsMessaging Nexus from `main` or `development`, using `java_build_queue_aws`. The snapshot publish step reuses the successful verification job.
 
-Branch and pull-request builds run:
-
-```bash
-mvn --batch-mode clean verify
-```
-
-and retain the Java JARs as Buildkite artifacts.
-
-The `main` branch additionally runs:
-
-```bash
-mvn --batch-mode clean deploy -DskipTests
-```
-
-which publishes `0.1.0-SNAPSHOT` to the standard MAPS `maps_snapshots`
-repository using the Maven configuration already present on the MAPS
-Buildkite Java agents.
-
+`.buildkite/pipeline_release.yml` is a separate release pipeline, also on `java_build_queue_aws`. It runs the full `mvn --batch-mode --no-transfer-progress clean deploy -Prelease` lifecycle with tests enabled, signed artifact generation and Maven Central publishing.
 
 ## UDP transport adapter
 
@@ -158,7 +123,7 @@ Protection Schemes with the reference Bouncy Castle backend, add:
 <dependency>
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client-protection-bc</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
@@ -167,9 +132,8 @@ Protection Scheme implementations. A caller provides a key resolver so key
 selection can depend on the Protection Context/Sender Identifier rather than
 being hard-coded into the MQTT-SN library.
 
-The root Maven reactor builds and deploys both artifacts. On `main`, Buildkite
-publishes both snapshot artifacts to the standard MAPS `maps_snapshots`
-repository.
+The root Maven reactor builds both modules. Development snapshots go to the
+MapsMessaging Nexus snapshot repository; versioned releases use Maven Central.
 
 
 ## Enhanced authentication
