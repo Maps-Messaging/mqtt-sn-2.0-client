@@ -84,7 +84,7 @@ Core Maven coordinates:
 <dependency>
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
@@ -94,7 +94,7 @@ Optional Bouncy Castle protection provider:
 <dependency>
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client-protection-bc</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 

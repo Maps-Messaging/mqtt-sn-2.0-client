@@ -16,7 +16,7 @@ steps:
   - label: ":nexus: Publish MQTT-SN 2.0 snapshot"
     key: "publish-snapshot"
     depends_on: "java-build"
-    if: (build.branch == "main" || build.branch == "development") && build.tag == null
+    if: build.branch == "development" && build.tag == null
     checkout:
       ssh_secret: "GITHUB_SSH_KEY"
     commands:
