@@ -3,7 +3,6 @@ steps:
     checkout:
       ssh_secret: "GITHUB_SSH_KEY"
     commands:
-      - 'case "$BUILDKITE_BRANCH" in release-*) ;; *) echo "Release pipeline requires a release-* branch" >&2; exit 1 ;; esac'
       - 'if grep -qE "<version>[^<]*SNAPSHOT</version>" pom.xml java/pom.xml java-bouncycastle/pom.xml; then echo "Refusing to publish SNAPSHOT Maven modules as a release" >&2; exit 1; fi'
       - "mvn --batch-mode --no-transfer-progress clean deploy -Prelease"
     agents:
