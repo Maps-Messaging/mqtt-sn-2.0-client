@@ -34,8 +34,12 @@ public final class MqttSnSession {
   private String authenticationMethod;
   private boolean reauthenticating;
   private boolean authenticationChallengePending;
+  private long requestedSleepDurationSeconds;
+  private long sleepDurationSeconds;
 
-
+  public long sleepDurationSeconds() {
+    return sleepDurationSeconds;
+  }
 
   private PacketType outboundRequestType;
   private PacketType expectedResponseType;
@@ -99,7 +103,7 @@ public final class MqttSnSession {
           || type == PacketType.PUBWOS
           || type == PacketType.SEARCHGW
           || type == PacketType.GWINFO;
-      case ASLEEP -> type == PacketType.PINGREQ
+      case ASLEEP -> type == PacketType.SLEEPREQ || type == PacketType.PINGREQ
           || type == PacketType.CONNECT
           || type == PacketType.DISCONNECT;
       case AWAKE -> isClientResponseType(type)
@@ -190,6 +194,12 @@ public final class MqttSnSession {
       }
       authenticationChallengePending = false;
     }
+    if (packet.type() == PacketType.SLEEPREQ) {
+      if (packet.body().remaining() != 7) {
+        throw malformed("SLEEPREQ must have seven payload octets");
+      }
+      requestedSleepDurationSeconds = Integer.toUnsignedLong(packet.body().getInt(3));
+    }
     outboundRequestType = packet.type();
     expectedResponseType = request.expectedResponse();
     outboundPacketIdentifier = request.packetIdentifier();
@@ -270,6 +280,7 @@ public final class MqttSnSession {
       if (packet.type() == PacketType.SLEEPRESP) {
         SleepResponse response = MqttSnCodec.decodeSleepResp(packet);
         if (response.reasonCode() == null || response.reasonCode() < 0x80) {
+          sleepDurationSeconds = response.sleepDurationSeconds() == null ? requestedSleepDurationSeconds : response.sleepDurationSeconds();
           state = ClientState.ASLEEP;
         }
       } else if (packet.type() == PacketType.PINGRESP && state == ClientState.AWAKE) {
@@ -461,6 +472,8 @@ public final class MqttSnSession {
 
   private void clearFlows() {
     authenticationMethod = null;
+    sleepDurationSeconds = 0;
+    requestedSleepDurationSeconds = 0;
     reauthenticating = false;
     authenticationChallengePending = false;
     clearOutbound();

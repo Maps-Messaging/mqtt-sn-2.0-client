@@ -120,6 +120,11 @@ static void test_sleep_and_awake_state(void) {
   assert(mqttsn_client_track_inbound(
       &client, sleepresp, sizeof(sleepresp)) == MQTTSN_OK);
   assert(client.state == MQTTSN_CLIENT_ASLEEP);
+  assert(mqttsn_client_track_outbound(&client, packet, written) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(&client, packet, written) == MQTTSN_OK);
+  assert(mqttsn_client_track_inbound(&client, sleepresp, sizeof(sleepresp)) == MQTTSN_OK);
+  assert(client.state == MQTTSN_CLIENT_ASLEEP);
+  assert(client.sleep_duration == 60u);
 
   assert(!mqttsn_client_can_send(&client, MQTTSN_PUBLISH));
   assert(mqttsn_encode_pingreq(

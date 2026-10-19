@@ -180,6 +180,19 @@ def test_packet_identifier_wraps_and_retry_exhaustion_disconnects() -> None:
     assert not session.has_outbound_request
 
 
+def test_repeated_sleep_request_and_retransmission_remain_asleep() -> None:
+    session = active_session()
+    session.track_outbound(encode_sleepreq(SleepRequest(0x3001, True, 60)))
+    session.track_inbound(bytes.fromhex("061400300100"))
+    assert session.state is ClientState.ASLEEP
+    renewal = encode_sleepreq(SleepRequest(0x3002, False, 120))
+    session.track_outbound(renewal)
+    session.track_outbound(renewal)
+    session.track_inbound(bytes.fromhex("061400300200"))
+    assert session.state is ClientState.ASLEEP
+    assert not session.has_outbound_request
+
+
 def test_auth_renewal_pauses_traffic_and_completes_without_connack() -> None:
     from mqttsn2 import AuthPacket, encode_auth
     session = Session()
@@ -200,6 +213,17 @@ def test_auth_renewal_requires_negotiated_method() -> None:
     session = active_session()
     with pytest.raises(MqttSnError):
         session.track_outbound(encode_auth(AuthPacket(2, 0x19, "TEST", b"")))
+
+
+def test_sleep_renewal_honours_server_duration_and_rejection_keeps_old_duration() -> None:
+    session = active_session()
+    session.track_outbound(encode_sleepreq(SleepRequest(0x3001, True, 60)))
+    session.track_inbound(bytes.fromhex("0a140130010000007800"))
+    assert session.sleep_duration_seconds == 120
+    session.track_outbound(encode_sleepreq(SleepRequest(0x3002, True, 300)))
+    session.track_inbound(bytes.fromhex("061400300280"))
+    assert session.sleep_duration_seconds == 120
+    assert session.state is ClientState.ASLEEP
 
 
 def test_renewal_rejects_changed_method_wrong_identifier_and_auth_retry() -> None:

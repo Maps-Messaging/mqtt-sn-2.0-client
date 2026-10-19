@@ -298,7 +298,18 @@ class MqttSnSessionTest {
     });
     return session;
   }
-
+  @Test
+  void repeated_sleep_request_and_retransmission_remain_asleep() {
+    MqttSnSession session = activeSession();
+    session.trackOutbound(MqttSnCodec.encodeSleepReq(new SleepRequest(0x3001, true, 60)));
+    session.trackInbound(new byte[] {6, 0x14, 0, 0x30, 1, 0});
+    byte[] renewal = MqttSnCodec.encodeSleepReq(new SleepRequest(0x3002, false, 120));
+    session.trackOutbound(renewal);
+    session.trackOutbound(renewal);
+    session.trackInbound(new byte[] {6, 0x14, 0, 0x30, 2, 0});
+    assertEquals(ClientState.ASLEEP, session.state());
+    assertFalse(session.hasOutboundRequest());
+  }
 
   @Test
   void auth_renewal_pauses_traffic_until_auth_success() {
@@ -321,7 +332,17 @@ class MqttSnSessionTest {
     assertThrows(MqttSnException.class, () -> session.trackOutbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0x19, "TEST", new byte[0]))));
   }
 
-
+  @Test
+  void sleep_renewal_honours_server_duration_and_rejection_keeps_old_duration() {
+    MqttSnSession session = activeSession();
+    session.trackOutbound(MqttSnCodec.encodeSleepReq(new SleepRequest(0x3001, true, 60)));
+    session.trackInbound(new byte[] {10, 0x14, 1, 0x30, 1, 0, 0, 0, 120, 0});
+    assertEquals(120, session.sleepDurationSeconds());
+    session.trackOutbound(MqttSnCodec.encodeSleepReq(new SleepRequest(0x3002, true, 300)));
+    session.trackInbound(new byte[] {6, 0x14, 0, 0x30, 2, (byte) 0x80});
+    assertEquals(120, session.sleepDurationSeconds());
+    assertEquals(ClientState.ASLEEP, session.state());
+  }
 
   @Test
   void renewal_rejects_changed_method_wrong_identifier_and_auth_retry() {

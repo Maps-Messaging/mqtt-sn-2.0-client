@@ -44,6 +44,8 @@ static void reset_connection_flow(mqttsn_client_t *client) {
   clear_outbound(client);
   clear_inbound(client);
   client->authentication_method_length = 0u;
+  client->requested_sleep_duration = 0u;
+  client->sleep_duration = 0u;
   client->reauthenticating = 0u;
   client->authentication_challenge_pending = 0u;
 }
@@ -123,7 +125,7 @@ int mqttsn_client_can_send(
              type == MQTTSN_GWINFO;
 
     case MQTTSN_CLIENT_ASLEEP:
-      return type == MQTTSN_PINGREQ ||
+      return type == MQTTSN_SLEEPREQ || type == MQTTSN_PINGREQ ||
              type == MQTTSN_CONNECT ||
              type == MQTTSN_DISCONNECT;
 
@@ -412,6 +414,13 @@ mqttsn_status_t mqttsn_client_track_outbound(
     }
     client->authentication_challenge_pending = 0u;
   }
+  if (packet.type == MQTTSN_SLEEPREQ) {
+    if (packet.body_length != 7u) {
+      return MQTTSN_MALFORMED_PACKET;
+    }
+    client->requested_sleep_duration = ((uint32_t)packet.body[3] << 24u) | ((uint32_t)packet.body[4] << 16u) |
+        ((uint32_t)packet.body[5] << 8u) | (uint32_t)packet.body[6];
+  }
   client->has_outbound_request = 1u;
   client->outbound_request_type = packet.type;
   client->expected_response_type = expected_response;
@@ -641,6 +650,7 @@ mqttsn_status_t mqttsn_client_track_inbound(
         return status;
       }
       if (!sleepresp.has_reason_code || sleepresp.reason_code < 0x80u) {
+        client->sleep_duration = sleepresp.has_sleep_duration ? sleepresp.sleep_duration : client->requested_sleep_duration;
         client->state = MQTTSN_CLIENT_ASLEEP;
       }
     } else if (packet.type == MQTTSN_PINGRESP &&

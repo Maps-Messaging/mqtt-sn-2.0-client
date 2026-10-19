@@ -317,6 +317,18 @@ static void test_session_wrapper() {
     assert(error.status() == MQTTSN_FLOW_CONTROL);
   }
 
+  const std::array<std::uint8_t, 4> pingresp{4u, 0x0Du, 0x20u, 1u};
+  session.trackInbound(pingresp);
+  const std::array<std::uint8_t, 9> sleep{9u, 0x13u, 1u, 0x30u, 1u, 0u, 0u, 0u, 60u};
+  const std::array<std::uint8_t, 6> sleepresp{6u, 0x14u, 0u, 0x30u, 1u, 0u};
+  session.trackOutbound(sleep);
+  session.trackInbound(sleepresp);
+  session.trackOutbound(sleep);
+  session.trackOutbound(sleep);
+  session.trackInbound(sleepresp);
+  assert(session.state() == mqttsn::ClientState::Asleep);
+  assert(session.sleepDurationSeconds() == 60u);
+
   session.retryExhausted();
   assert(session.state() == mqttsn::ClientState::Disconnected);
   assert(!session.hasOutboundRequest());

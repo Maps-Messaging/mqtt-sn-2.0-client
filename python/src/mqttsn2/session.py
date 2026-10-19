@@ -59,6 +59,8 @@ class Session:
         self._authentication_method: str | None = None
         self._reauthenticating = False
         self._authentication_challenge_pending = False
+        self._requested_sleep_duration_seconds = 0
+        self.sleep_duration_seconds = 0
 
         self.outbound_request_type: PacketType | None = None
         self.expected_response_type: PacketType | None = None
@@ -111,6 +113,7 @@ class Session:
 
         if self.state is ClientState.ASLEEP:
             return packet_type in {
+                PacketType.SLEEPREQ,
                 PacketType.PINGREQ,
                 PacketType.CONNECT,
                 PacketType.DISCONNECT,
@@ -202,6 +205,10 @@ class Session:
                     raise MqttSnError("STATE_ERROR", "Unexpected re-authentication AUTH")
                 self._reauthenticating = True
             self._authentication_challenge_pending = False
+        if packet.type is PacketType.SLEEPREQ:
+            if len(packet.body) != 7:
+                raise MqttSnError("MALFORMED_PACKET", "SLEEPREQ must have seven payload octets")
+            self._requested_sleep_duration_seconds = int.from_bytes(packet.body[3:7], "big")
         self.outbound_request_type = packet.type
         self.expected_response_type = request.expected_response
         self.outbound_packet_identifier = request.packet_identifier
@@ -276,6 +283,7 @@ class Session:
             if packet.type is PacketType.SLEEPRESP:
                 response = decode_sleepresp(packet)
                 if response.reason_code is None or response.reason_code < 0x80:
+                    self.sleep_duration_seconds = response.sleep_duration_seconds if response.sleep_duration_seconds is not None else self._requested_sleep_duration_seconds
                     self.state = ClientState.ASLEEP
             elif (
                 packet.type is PacketType.PINGRESP
@@ -472,6 +480,8 @@ class Session:
 
     def _clear_flows(self) -> None:
         self._authentication_method = None
+        self.sleep_duration_seconds = 0
+        self._requested_sleep_duration_seconds = 0
         self._reauthenticating = False
         self._authentication_challenge_pending = False
         self._clear_outbound()

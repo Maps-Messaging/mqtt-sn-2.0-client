@@ -42,6 +42,8 @@ typedef struct {
   uint8_t authentication_method_length;
   uint8_t reauthenticating;
   uint8_t authentication_challenge_pending;
+  uint32_t requested_sleep_duration;
+  uint32_t sleep_duration;
   uint8_t has_outbound_request;
   mqttsn_packet_type_t outbound_request_type;
   mqttsn_packet_type_t expected_response_type;
