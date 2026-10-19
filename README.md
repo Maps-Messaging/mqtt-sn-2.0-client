@@ -1,8 +1,8 @@
 # MQTT-SN 2.0 Client Suite
 
-[Release notes for 0.1.0](RELEASE_NOTES.md)
+[Release notes for 0.2.0](RELEASE_NOTES.md)
 
-The Java Maven artifacts for version 0.1.0 are `io.mapsmessaging:mqtt-sn-2-client` and the optional `io.mapsmessaging:mqtt-sn-2-client-protection-bc` module. See [Java usage](java/README.md) and [supported protocol behaviour](COMPLETENESS.md).
+The Java Maven artifacts for version 0.2.0 are `io.mapsmessaging:mqtt-sn-2-client` and the optional `io.mapsmessaging:mqtt-sn-2-client-protection-bc` module. See [Java usage](java/README.md) and [supported protocol behaviour](COMPLETENESS.md).
 
 
 Transport-neutral MQTT-SN 2.0 reference clients for validating protocol implementations, including MapsMessaging.

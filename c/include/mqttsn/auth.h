@@ -56,6 +56,8 @@ typedef struct {
 typedef struct {
   const mqttsn_auth_mechanism_t *mechanism;
   uint8_t active;
+  uint8_t authenticated;
+  uint8_t reauthenticating;
 } mqttsn_auth_exchange_t;
 
 mqttsn_status_t mqttsn_auth_exchange_init(
@@ -80,6 +82,13 @@ mqttsn_status_t mqttsn_auth_exchange_continue(
 mqttsn_status_t mqttsn_auth_exchange_accept_connack(
     mqttsn_auth_exchange_t *exchange,
     const mqttsn_connack_view_t *connack,
+    uint8_t *scratch,
+    size_t scratch_capacity);
+
+/* Verify final AUTH data. On failure the transport must DISCONNECT and delete its connection. */
+mqttsn_status_t mqttsn_auth_exchange_accept_auth(
+    mqttsn_auth_exchange_t *exchange,
+    const mqttsn_auth_t *server_auth,
     uint8_t *scratch,
     size_t scratch_capacity);
 

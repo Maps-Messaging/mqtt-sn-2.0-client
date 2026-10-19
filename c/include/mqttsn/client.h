@@ -38,6 +38,12 @@ typedef struct {
   mqttsn_client_state_t state;
   uint16_t next_packet_identifier;
   uint16_t connect_packet_identifier;
+  uint8_t authentication_method[255];
+  uint8_t authentication_method_length;
+  uint8_t reauthenticating;
+  uint8_t authentication_challenge_pending;
+  uint32_t requested_sleep_duration;
+  uint32_t sleep_duration;
   uint8_t has_outbound_request;
   mqttsn_packet_type_t outbound_request_type;
   mqttsn_packet_type_t expected_response_type;

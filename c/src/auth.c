@@ -24,7 +24,7 @@ static int method_matches(
     const mqttsn_auth_mechanism_t *mechanism,
     const uint8_t *method,
     size_t method_length) {
-  return mechanism != NULL &&
+  return mechanism != NULL && method != NULL &&
       mechanism->method_length == method_length &&
       (method_length == 0u ||
        memcmp(mechanism->method, method, method_length) == 0);
@@ -45,6 +45,8 @@ mqttsn_status_t mqttsn_auth_exchange_init(
 
   exchange->mechanism = mechanism;
   exchange->active = 0u;
+  exchange->authenticated = 0u;
+  exchange->reauthenticating = 0u;
   return MQTTSN_OK;
 }
 
@@ -127,6 +129,9 @@ mqttsn_status_t mqttsn_auth_exchange_accept_connack(
   if (exchange == NULL || exchange->mechanism == NULL || connack == NULL) {
     return MQTTSN_INVALID_ARGUMENT;
   }
+  if (exchange->reauthenticating) {
+    return MQTTSN_STATE_ERROR;
+  }
   if (!exchange->active) {
     return MQTTSN_OK;
   }
@@ -161,7 +166,41 @@ mqttsn_status_t mqttsn_auth_exchange_accept_connack(
     }
   }
 
+  exchange->authenticated = connack->reason_code == MQTTSN_AUTH_SUCCESS;
   exchange->active = 0u;
+  return MQTTSN_OK;
+}
+
+mqttsn_status_t mqttsn_auth_exchange_accept_auth(
+    mqttsn_auth_exchange_t *exchange,
+    const mqttsn_auth_t *server_auth,
+    uint8_t *scratch,
+    size_t scratch_capacity) {
+  size_t written = 0u;
+  mqttsn_status_t status;
+  if (exchange == NULL || exchange->mechanism == NULL || server_auth == NULL) {
+    return MQTTSN_INVALID_ARGUMENT;
+  }
+  if (!exchange->active || !exchange->reauthenticating ||
+      server_auth->reason_code != MQTTSN_AUTH_SUCCESS ||
+      !method_matches(exchange->mechanism, server_auth->authentication_method, server_auth->authentication_method_length)) {
+    return MQTTSN_STATE_ERROR;
+  }
+  if (server_auth->authentication_data_length != 0u) {
+    if (scratch == NULL || server_auth->authentication_data == NULL) {
+      return MQTTSN_INVALID_ARGUMENT;
+    }
+    status = exchange->mechanism->evaluate_challenge(exchange->mechanism->user_data,
+        server_auth->authentication_data, server_auth->authentication_data_length, scratch, scratch_capacity, &written);
+    if (status != MQTTSN_OK) {
+      return status;
+    }
+  }
+  if (!exchange->mechanism->complete(exchange->mechanism->user_data)) {
+    return MQTTSN_STATE_ERROR;
+  }
+  exchange->active = 0u;
+  exchange->reauthenticating = 0u;
   return MQTTSN_OK;
 }
 
@@ -179,7 +218,7 @@ mqttsn_status_t mqttsn_auth_exchange_begin_reauthentication(
       response_data_written == NULL || client_auth == NULL) {
     return MQTTSN_INVALID_ARGUMENT;
   }
-  if (exchange->active) {
+  if (exchange->active || !exchange->authenticated) {
     return MQTTSN_STATE_ERROR;
   }
 
@@ -197,6 +236,7 @@ mqttsn_status_t mqttsn_auth_exchange_begin_reauthentication(
   }
 
   exchange->active = 1u;
+  exchange->reauthenticating = 1u;
   memset(client_auth, 0, sizeof(*client_auth));
   client_auth->packet_identifier = packet_identifier;
   client_auth->reason_code = MQTTSN_AUTH_REAUTHENTICATE;
@@ -215,4 +255,6 @@ void mqttsn_auth_exchange_reset(mqttsn_auth_exchange_t *exchange) {
     exchange->mechanism->reset(exchange->mechanism->user_data);
   }
   exchange->active = 0u;
+  exchange->reauthenticating = 0u;
+  exchange->authenticated = 0u;
 }

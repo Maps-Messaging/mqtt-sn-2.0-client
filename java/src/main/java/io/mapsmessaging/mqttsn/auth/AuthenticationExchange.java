@@ -31,6 +31,8 @@ public final class AuthenticationExchange implements AutoCloseable {
 
   private final AuthenticationMechanism mechanism;
   private boolean active;
+  private boolean reauthenticating;
+  private boolean authenticated;
 
   public AuthenticationExchange(AuthenticationMechanism mechanism) {
     this.mechanism = Objects.requireNonNull(mechanism, "mechanism");
@@ -71,6 +73,9 @@ public final class AuthenticationExchange implements AutoCloseable {
 
   public void acceptConnAck(ConnAck connAck) {
     Objects.requireNonNull(connAck, "connAck");
+    if (reauthenticating) {
+      throw state("Re-authentication completes with AUTH, not CONNACK");
+    }
     if (!active) {
       return;
     }
@@ -87,14 +92,33 @@ public final class AuthenticationExchange implements AutoCloseable {
         throw state("Authentication mechanism did not complete before successful CONNACK");
       }
     }
+    authenticated = connAck.reasonCode() == SUCCESS;
     active = false;
   }
 
+  /** Verify the final server AUTH, including mechanism-specific final data. */
+  public void acceptAuth(AuthPacket serverAuth) {
+    Objects.requireNonNull(serverAuth, "serverAuth");
+    if (!active || !reauthenticating || serverAuth.reasonCode() != SUCCESS || !method().equals(serverAuth.authenticationMethod())) {
+      throw state("Unexpected re-authentication completion");
+    }
+    byte[] finalData = serverAuth.authenticationData();
+    if (finalData != null && finalData.length != 0) {
+      mechanism.evaluateChallenge(finalData);
+    }
+    if (!mechanism.complete()) {
+      throw state("Authentication mechanism did not complete before successful AUTH");
+    }
+    active = false;
+    reauthenticating = false;
+  }
+
   public AuthPacket beginReauthentication(int packetIdentifier) {
-    if (active) {
-      throw state("Authentication exchange is already active");
+    if (active || !authenticated) {
+      throw state("Re-authentication requires a successfully authenticated connection");
     }
     mechanism.reset();
+    reauthenticating = true;
     active = true;
     byte[] response = mechanism.initialResponse();
     return new AuthPacket(
@@ -111,6 +135,8 @@ public final class AuthenticationExchange implements AutoCloseable {
   @Override
   public void close() {
     active = false;
+    authenticated = false;
+    reauthenticating = false;
     mechanism.close();
   }
 

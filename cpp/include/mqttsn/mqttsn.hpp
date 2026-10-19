@@ -468,6 +468,10 @@ class Session {
     return static_cast<ClientState>(native_.state);
   }
 
+  [[nodiscard]] std::uint32_t sleepDurationSeconds() const noexcept {
+    return native_.sleep_duration;
+  }
+
   [[nodiscard]] bool hasOutboundRequest() const noexcept {
     return native_.has_outbound_request != 0;
   }

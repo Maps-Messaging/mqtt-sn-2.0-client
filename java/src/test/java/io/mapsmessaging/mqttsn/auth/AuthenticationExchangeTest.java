@@ -119,6 +119,41 @@ class AuthenticationExchangeTest {
     assertEquals(2, created.get());
   }
 
+  @Test
+  void renewal_completes_with_auth_success_and_can_repeat() {
+    TestMechanism mechanism = new TestMechanism();
+    AuthenticationExchange exchange = new AuthenticationExchange(mechanism);
+    exchange.initialResponse();
+    exchange.acceptConnAck(new ConnAck(false, 1, 0, null, null, "TEST", new byte[] {0x7F}, ""));
+    for (int packetIdentifier = 2; packetIdentifier <= 3; packetIdentifier++) {
+      exchange.beginReauthentication(packetIdentifier);
+      exchange.acceptAuth(new AuthPacket(packetIdentifier, 0, "TEST", new byte[] {0x7F}));
+      assertFalse(exchange.active());
+      assertTrue(mechanism.complete());
+    }
+  }
+
+  @Test
+  void renewal_rejects_connack_and_changed_method() {
+    AuthenticationExchange exchange = new AuthenticationExchange(new TestMechanism());
+    exchange.initialResponse();
+    exchange.acceptConnAck(new ConnAck(false, 1, 0, null, null, "TEST", new byte[] {0x7F}, ""));
+    exchange.beginReauthentication(2);
+    assertThrows(MqttSnException.class, () -> exchange.acceptConnAck(new ConnAck(false, 2, 0, null, null, "TEST", new byte[] {0x7F}, "")));
+    assertThrows(MqttSnException.class, () -> exchange.acceptAuth(new AuthPacket(2, 0, "OTHER", new byte[] {0x7F})));
+  }
+
+  @Test
+  void renewal_verifies_final_data_and_requires_initial_authentication() {
+    AuthenticationExchange exchange = new AuthenticationExchange(new TestMechanism());
+    assertThrows(MqttSnException.class, () -> exchange.beginReauthentication(2));
+    exchange.initialResponse();
+    exchange.acceptConnAck(new ConnAck(false, 1, 0, null, null, "TEST", new byte[] {0x7F}, ""));
+    exchange.beginReauthentication(2);
+    assertThrows(MqttSnException.class, () -> exchange.acceptAuth(new AuthPacket(2, 0, "TEST", new byte[0])));
+    assertTrue(exchange.active());
+  }
+
   private static final class TestMechanism implements AuthenticationMechanism {
     private boolean complete;
     private int resetCount;

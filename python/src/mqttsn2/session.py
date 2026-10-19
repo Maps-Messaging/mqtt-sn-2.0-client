@@ -24,6 +24,7 @@ from .codec import DecodedPacket, MqttSnError, PacketType, decode_connack, decod
 from .packets import (
     QoS,
     decode_ack,
+    decode_auth,
     decode_pingresp,
     decode_publish,
     decode_sleepresp,
@@ -55,6 +56,11 @@ class Session:
         self.state = ClientState.NONE
         self._next_packet_identifier = initial_packet_identifier or 1
         self._connect_packet_identifier = 0
+        self._authentication_method: str | None = None
+        self._reauthenticating = False
+        self._authentication_challenge_pending = False
+        self._requested_sleep_duration_seconds = 0
+        self.sleep_duration_seconds = 0
 
         self.outbound_request_type: PacketType | None = None
         self.expected_response_type: PacketType | None = None
@@ -86,6 +92,8 @@ class Session:
         return result
 
     def can_send(self, packet_type: PacketType) -> bool:
+        if self._reauthenticating:
+            return packet_type in {PacketType.AUTH, PacketType.DISCONNECT}
         if self.state in (ClientState.NONE, ClientState.DISCONNECTED):
             return packet_type in {
                 PacketType.CONNECT,
@@ -105,6 +113,7 @@ class Session:
 
         if self.state is ClientState.ASLEEP:
             return packet_type in {
+                PacketType.SLEEPREQ,
                 PacketType.PINGREQ,
                 PacketType.CONNECT,
                 PacketType.DISCONNECT,
@@ -148,6 +157,7 @@ class Session:
                 packet.body, 1, "CONNECT Packet Identifier"
             )
             self._clear_flows()
+            self._authentication_method = self._connect_authentication_method(packet.body)
             self.state = ClientState.CONNECTING
             return
 
@@ -183,6 +193,22 @@ class Session:
                 )
             return
 
+        if packet.type is PacketType.AUTH:
+            auth = decode_auth(packet)
+            if self._authentication_method is None or auth.authentication_method != self._authentication_method:
+                raise MqttSnError("STATE_ERROR", "AUTH requires the method negotiated in CONNECT")
+            if self.state is ClientState.CONNECTING:
+                if auth.reason_code != 0x18 or not self._authentication_challenge_pending:
+                    raise MqttSnError("STATE_ERROR", "Initial AUTH requires a server challenge")
+            else:
+                if auth.reason_code != (0x18 if self._reauthenticating else 0x19) or (self._reauthenticating and not self._authentication_challenge_pending):
+                    raise MqttSnError("STATE_ERROR", "Unexpected re-authentication AUTH")
+                self._reauthenticating = True
+            self._authentication_challenge_pending = False
+        if packet.type is PacketType.SLEEPREQ:
+            if len(packet.body) != 7:
+                raise MqttSnError("MALFORMED_PACKET", "SLEEPREQ must have seven payload octets")
+            self._requested_sleep_duration_seconds = int.from_bytes(packet.body[3:7], "big")
         self.outbound_request_type = packet.type
         self.expected_response_type = request.expected_response
         self.outbound_packet_identifier = request.packet_identifier
@@ -219,6 +245,23 @@ class Session:
             self.state = ClientState.DISCONNECTED
             return
 
+        if packet.type is PacketType.AUTH:
+            auth = decode_auth(packet)
+            expected_identifier = self.outbound_packet_identifier if self.has_outbound_request else self._connect_packet_identifier
+            if (self._authentication_method is None or auth.authentication_method != self._authentication_method
+                    or auth.packet_identifier != expected_identifier
+                    or (not self.has_outbound_request and (self.state is not ClientState.CONNECTING or self._authentication_challenge_pending))
+                    or (self.state is not ClientState.CONNECTING and not self._reauthenticating)
+                    or (self.state is ClientState.CONNECTING and auth.reason_code != 0x18)
+                    or (self._reauthenticating and auth.reason_code not in (0, 0x18))):
+                raise MqttSnError("STATE_ERROR", "Unexpected server AUTH")
+            self._clear_outbound()
+            self._authentication_challenge_pending = auth.reason_code == 0x18
+            if auth.reason_code == 0:
+                self._reauthenticating = False
+            return
+        if self._reauthenticating:
+            raise MqttSnError("STATE_ERROR", "Other packets are paused during re-authentication")
         if (
             self.has_outbound_request
             and packet.type is self.expected_response_type
@@ -240,6 +283,7 @@ class Session:
             if packet.type is PacketType.SLEEPRESP:
                 response = decode_sleepresp(packet)
                 if response.reason_code is None or response.reason_code < 0x80:
+                    self.sleep_duration_seconds = response.sleep_duration_seconds if response.sleep_duration_seconds is not None else self._requested_sleep_duration_seconds
                     self.state = ClientState.ASLEEP
             elif (
                 packet.type is PacketType.PINGRESP
@@ -266,6 +310,22 @@ class Session:
                 "Buffer must contain exactly one MQTT-SN packet",
             )
         return packet
+
+    @staticmethod
+    def _connect_authentication_method(body: bytes) -> str | None:
+        if len(body) < 8:
+            raise MqttSnError("MALFORMED_PACKET", "Truncated CONNECT")
+        flags = body[0]
+        if flags & 4 == 0:
+            return None
+        offset = 8 + (4 if flags & 8 else 0) + (2 if flags & 16 else 0)
+        if len(body) <= offset:
+            raise MqttSnError("MALFORMED_PACKET", "Truncated CONNECT authentication method")
+        length = body[offset]
+        offset += 1
+        if length == 0 or len(body) < offset + length:
+            raise MqttSnError("MALFORMED_PACKET", "Truncated CONNECT authentication method")
+        return bytes(body[offset:offset + length]).decode("utf-8")
 
     def _outbound_request_info(self, packet: DecodedPacket) -> _RequestInfo | None:
         if packet.type is PacketType.PUBLISH:
@@ -419,6 +479,11 @@ class Session:
         return value
 
     def _clear_flows(self) -> None:
+        self._authentication_method = None
+        self.sleep_duration_seconds = 0
+        self._requested_sleep_duration_seconds = 0
+        self._reauthenticating = False
+        self._authentication_challenge_pending = False
         self._clear_outbound()
         self._clear_inbound()
 

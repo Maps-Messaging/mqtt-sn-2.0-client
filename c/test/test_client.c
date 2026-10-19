@@ -120,6 +120,11 @@ static void test_sleep_and_awake_state(void) {
   assert(mqttsn_client_track_inbound(
       &client, sleepresp, sizeof(sleepresp)) == MQTTSN_OK);
   assert(client.state == MQTTSN_CLIENT_ASLEEP);
+  assert(mqttsn_client_track_outbound(&client, packet, written) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(&client, packet, written) == MQTTSN_OK);
+  assert(mqttsn_client_track_inbound(&client, sleepresp, sizeof(sleepresp)) == MQTTSN_OK);
+  assert(client.state == MQTTSN_CLIENT_ASLEEP);
+  assert(client.sleep_duration == 60u);
 
   assert(!mqttsn_client_can_send(&client, MQTTSN_PUBLISH));
   assert(mqttsn_encode_pingreq(
@@ -373,7 +378,36 @@ static void test_keep_alive_timer(void) {
   assert(mqttsn_keep_alive_timer_poll(&timer, 10000u) == MQTTSN_KEEP_ALIVE_NONE);
 }
 
+static void test_authentication_renewal(void) {
+  const uint8_t connect[] = {0x11, MQTTSN_CONNECT, 5, 0, 1, 2, 0, 60, 0, 0, 4, 'T', 'E', 'S', 'T', 0, 0};
+  const uint8_t connack[] = {6, MQTTSN_CONNACK, 0, 0, 1, 0};
+  uint8_t auth[] = {0x0A, MQTTSN_AUTH, 0, 2, 0x19, 4, 'T', 'E', 'S', 'T'};
+  mqttsn_client_t client;
+  mqttsn_client_init(&client, 1u);
+  assert(mqttsn_client_track_outbound(&client, connect, sizeof(connect)) == MQTTSN_OK);
+  assert(mqttsn_client_track_inbound(&client, connack, sizeof(connack)) == MQTTSN_OK);
+  auth[9] = 'X';
+  assert(mqttsn_client_track_outbound(&client, auth, sizeof(auth)) == MQTTSN_STATE_ERROR);
+  auth[9] = 'T';
+  assert(mqttsn_client_track_outbound(&client, auth, sizeof(auth)) == MQTTSN_OK);
+  assert(mqttsn_client_track_outbound(&client, auth, sizeof(auth)) == MQTTSN_FLOW_CONTROL);
+  assert(!mqttsn_client_can_send(&client, MQTTSN_PUBLISH));
+  auth[3] = 9;
+  auth[4] = 0;
+  assert(mqttsn_client_track_inbound(&client, auth, sizeof(auth)) == MQTTSN_STATE_ERROR);
+  auth[3] = 2;
+  auth[4] = 0x18;
+  assert(mqttsn_client_track_inbound(&client, auth, sizeof(auth)) == MQTTSN_OK);
+  auth[3] = 3;
+  assert(mqttsn_client_track_outbound(&client, auth, sizeof(auth)) == MQTTSN_OK);
+  auth[4] = 0;
+  assert(mqttsn_client_track_inbound(&client, auth, sizeof(auth)) == MQTTSN_OK);
+  assert(client.state == MQTTSN_CLIENT_ACTIVE);
+  assert(mqttsn_client_can_send(&client, MQTTSN_PUBLISH));
+}
+
 int main(void) {
+  test_authentication_renewal();
   test_connection_state();
   test_outbound_flow_control();
   test_sleep_and_awake_state();

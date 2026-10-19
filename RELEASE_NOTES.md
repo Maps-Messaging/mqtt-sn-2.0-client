@@ -1,3 +1,43 @@
+# MQTT-SN 2.0 Client Suite 0.2.0
+
+Release date: 19 October 2026. Changes since 0.1.0; tracked by MSG-325.
+
+This release completes connected authentication renewal and repeated sleep requests in the Java, Python and native client implementations. The protocol baseline remains OASIS MQTT-SN 2.0 CSD01, source revision `0dae5066d123d068ddca2ddb861ce8858aafee92`.
+
+## Authentication renewal
+
+- Start reauthentication with AUTH reason 0x19 and continue using fresh packet identifiers and reason 0x18.
+- Accept final AUTH success and validate the mechanism's final authentication data. Initial authentication still finishes with CONNACK.
+- Keep the authentication method consistent and require successful initial authentication before renewal.
+- Pause other client traffic while renewal is in progress. AUTH is not retransmitted.
+- Add Java and Python exchange handling, C state and exchange validation, and C++ forwarding APIs. Arduino uses the updated C core.
+
+## Sleep renewal
+
+- Send SLEEPREQ while already ASLEEP without changing to an awake state.
+- Retry a SLEEPREQ after a lost SLEEPRESP while preserving its packet identifier and contents.
+- Remember accepted sleep duration, honour server-suggested values and retain the previous accepted duration when renewal is rejected.
+- Reset renewal bookkeeping when a new connection begins.
+
+## Compatibility
+
+**Breaking native ABI change:** C client and authentication-exchange structures have grown. Rebuild C, C++ and Arduino consumers against the new headers and implementation. Do not mix 0.1.0 native objects with 0.2.0 headers.
+
+The Java additions are compatible with existing applications. Java 21 remains required. The optional protection module remains separate from the core client.
+
+Maven coordinates:
+
+- `io.mapsmessaging:mqtt-sn-2-client:0.2.0`
+- `io.mapsmessaging:mqtt-sn-2-client-protection-bc:0.2.0`
+
+## Validation and scope
+
+Client validation passed 152 Java tests, 115 Python tests and seven native C/C++ test executables, with additional Arduino forwarding-source host checks. Server integration exercises the actual Java UDP client for successful and failed SCRAM renewal, timeout, method continuity, paused publications, sleep renewal, lost-response retry and queued delivery. Matthew confirmed the server tests green on Windows after the directory-sync portability fix.
+
+This is the completed implementation milestone for the current draft scope, not certification against a final MQTT-SN 2.0 standard. Per-language limits and optional transport/crypto requirements remain documented in [COMPLETENESS.md](COMPLETENESS.md). See [authentication](docs/AUTHENTICATION.md) and [sleep renewal](docs/SLEEP_RENEWAL.md) for API guidance.
+
+---
+
 # MQTT-SN 2.0 Client Suite 0.1.0
 
 Version 0.1.0 is the first release of the MapsMessaging MQTT-SN 2.0 reference-client suite. It targets **OASIS MQTT-SN 2.0 Committee Specification Draft 01 (14 August 2026)**, not a final OASIS Standard.

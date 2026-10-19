@@ -103,6 +103,9 @@ int main() {
   const auto reauth = exchange.beginReauthentication(0x2222u);
   assert(reauth.reasonCode == 0x19u);
   assert(mechanism.resetCount == 1u);
+  exchange.acceptAuth(mqttsn::AuthPacket{0x2222u, 0u, "TEST", finalData});
+  assert(mechanism.complete());
+  assert(!exchange.active());
 
   return 0;
 }
