@@ -6,7 +6,7 @@
 
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client-parent</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>MQTT-SN 2.0 Client Suite</name>
