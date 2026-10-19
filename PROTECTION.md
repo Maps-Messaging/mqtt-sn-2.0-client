@@ -85,7 +85,7 @@ Concrete standard-scheme providers are optional modules:
 Artifact:
 
 ```text
-io.mapsmessaging:mqtt-sn-2-client-protection-bc:0.1.0
+io.mapsmessaging:mqtt-sn-2-client-protection-bc:0.2.0
 ```
 
 This module depends on the core Java client and Bouncy Castle. The core
