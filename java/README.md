@@ -8,7 +8,7 @@ The Java client is a transport-neutral reference implementation of MQTT-SN 2.0 i
 <dependency>
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
@@ -25,14 +25,14 @@ mvn clean verify
 The primary JAR is written to:
 
 ```text
-java/target/mqtt-sn-2-client-0.1.0.jar
+java/target/mqtt-sn-2-client-0.2.0.jar
 ```
 
 The build also creates source and Javadoc JARs.
 
 ## Maven publication
 
-Published Java releases use Maven Central. The 0.1.0 release consists of the parent POM, core client and optional Bouncy Castle protection provider, with signed JAR, sources and Javadoc artifacts for both modules.
+Published Java releases use Maven Central. The 0.2.0 release consists of the parent POM, core client and optional Bouncy Castle protection provider, with signed JAR, sources and Javadoc artifacts for both modules.
 
 The release pipeline `.buildkite/pipeline_release.yml` runs the full Maven build and tests on `java_build_queue_aws`, then publishes with the `release` Maven profile. Release builds must use a `release-*` branch and non-SNAPSHOT module versions. Central publishing credentials and a signing key are required.
 
@@ -123,7 +123,7 @@ Protection Schemes with the reference Bouncy Castle backend, add:
 <dependency>
   <groupId>io.mapsmessaging</groupId>
   <artifactId>mqtt-sn-2-client-protection-bc</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
