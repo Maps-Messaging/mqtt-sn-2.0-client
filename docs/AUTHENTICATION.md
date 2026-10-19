@@ -178,3 +178,34 @@ Arduino exposes the same C callback API via `mqttsn/auth.h`.
 This makes it possible to use a board-specific mechanism, secure element or
 small custom challenge/response implementation without pulling a desktop SASL
 stack onto the microcontroller.
+
+
+## Completing connected re-authentication (MSG-325)
+
+The initial exchange ends with CONNACK. A subsequent renewal ends with an AUTH
+packet whose reason code is `0x00`; it must not establish another connection.
+Use `AuthenticationExchange.acceptAuth()` in Java/C++, `accept_auth()` in Python,
+or `mqttsn_auth_exchange_accept_auth()` in C to verify the final mechanism data
+and mark the exchange inactive. These APIs reject completion before renewal,
+a changed method, and an incomplete mechanism. A successfully authenticated
+initial exchange is required before starting renewal.
+
+Track every outgoing and incoming packet through the session controller. It
+retains the method from CONNECT, matches each server reply to the latest client
+AUTH identifier, permits a fresh identifier on continuation, pauses other client
+traffic during renewal, and rejects AUTH retransmission. AUTH `0x19` initiates
+renewal; subsequent client AUTH packets use `0x18`. CONNACK remains confined to
+the initial connection. A transport can reuse an exchange for multiple renewals.
+
+The transport owner must bound the whole exchange with a deadline. On timeout,
+DISCONNECT, or final mechanism verification failure, send DISCONNECT with an
+appropriate reason when possible, delete the local connection (Java
+`session.retryExhausted()`, Python `session.retry_exhausted()`, C
+`mqttsn_client_retry_exhausted()`), and dispose/reset the authentication mechanism.
+Do not retry AUTH. The core helpers own no socket, scheduler, or automatic retry
+loop. Session tracking validates the protocol; `acceptAuth` also validates the
+mechanism's final signature/data before the application resumes work.
+
+C and C++ applications must rebuild against the updated headers: the public
+client and authentication-exchange structs include additional renewal state.
+Arduino forwarding headers and sources compile the canonical C implementation.

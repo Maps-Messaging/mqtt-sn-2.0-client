@@ -180,6 +180,12 @@ static void test_generic_exchange(void) {
       &client_auth) == MQTTSN_OK);
   assert(client_auth.reason_code == MQTTSN_AUTH_REAUTHENTICATE);
   assert(state.reset_count == 1u);
+  server_auth.reason_code = MQTTSN_AUTH_SUCCESS;
+  server_auth.authentication_data = final_data;
+  server_auth.authentication_data_length = sizeof(final_data);
+  assert(mqttsn_auth_exchange_accept_auth(&exchange, &server_auth, response_data, sizeof(response_data)) == MQTTSN_OK);
+  assert(exchange.active == 0u);
+  assert(state.complete != 0u);
 }
 
 static void test_method_change_is_rejected(void) {

@@ -19,6 +19,7 @@ import pytest
 
 from mqttsn2 import (
     AUTH_CONTINUE,
+    AUTH_SUCCESS,
     AUTH_REAUTHENTICATE,
     AuthenticationExchange,
     AuthPacket,
@@ -119,3 +120,36 @@ def test_method_change_is_rejected() -> None:
             2,
         )
     assert error.value.code == "STATE_ERROR"
+
+
+def test_reauthentication_completes_with_auth_success_and_can_repeat() -> None:
+    mechanism = MechanismStub()
+    exchange = AuthenticationExchange(mechanism)
+    exchange.initial_response()
+    exchange.accept_connack(ConnAck(False, 1, 0, None, None, "TEST", b"\x7f", ""))
+    for packet_identifier in (2, 3):
+        exchange.begin_reauthentication(packet_identifier)
+        exchange.accept_auth(AuthPacket(packet_identifier, AUTH_SUCCESS, "TEST", b"\x7f"))
+        assert not exchange.active
+        assert mechanism.complete
+
+
+def test_reauthentication_cannot_finish_with_connack() -> None:
+    exchange = AuthenticationExchange(MechanismStub())
+    exchange.initial_response()
+    exchange.accept_connack(ConnAck(False, 1, 0, None, None, "TEST", b"\x7f", ""))
+    exchange.begin_reauthentication(2)
+    with pytest.raises(MqttSnError):
+        exchange.accept_connack(ConnAck(False, 2, 0, None, None, "TEST", b"\x7f", ""))
+
+
+def test_renewal_verifies_final_data_and_requires_initial_authentication() -> None:
+    exchange = AuthenticationExchange(MechanismStub())
+    with pytest.raises(MqttSnError):
+        exchange.begin_reauthentication(2)
+    exchange.initial_response()
+    exchange.accept_connack(ConnAck(False, 1, 0, None, None, "TEST", b"\x7f", ""))
+    exchange.begin_reauthentication(2)
+    with pytest.raises(MqttSnError):
+        exchange.accept_auth(AuthPacket(2, AUTH_SUCCESS, "TEST", b""))
+    assert exchange.active

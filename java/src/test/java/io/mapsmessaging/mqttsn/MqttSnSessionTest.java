@@ -298,4 +298,43 @@ class MqttSnSessionTest {
     });
     return session;
   }
+
+
+  @Test
+  void auth_renewal_pauses_traffic_until_auth_success() {
+    MqttSnSession session = new MqttSnSession();
+    session.trackOutbound(MqttSnCodec.encodeConnect(new ConnectOptions(true, false, false, 1, 60, 0, "auth"), "TEST", new byte[0]));
+    session.trackInbound(new byte[] {6, 2, 0, 0, 1, 0});
+    session.trackOutbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0x19, "TEST", new byte[0])));
+    assertFalse(session.canSend(PacketType.PUBLISH));
+    session.trackInbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0x18, "TEST", new byte[] {1})));
+    session.trackOutbound(MqttSnCodec.encodeAuth(new AuthPacket(3, 0x18, "TEST", new byte[] {2})));
+    session.trackInbound(MqttSnCodec.encodeAuth(new AuthPacket(3, 0, "TEST", new byte[] {3})));
+    assertEquals(ClientState.ACTIVE, session.state());
+    assertTrue(session.canSend(PacketType.PUBLISH));
+    assertFalse(session.hasOutboundRequest());
+  }
+
+  @Test
+  void renewal_requires_connect_authentication_method() {
+    MqttSnSession session = activeSession();
+    assertThrows(MqttSnException.class, () -> session.trackOutbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0x19, "TEST", new byte[0]))));
+  }
+
+
+
+  @Test
+  void renewal_rejects_changed_method_wrong_identifier_and_auth_retry() {
+    MqttSnSession session = new MqttSnSession();
+    session.trackOutbound(MqttSnCodec.encodeConnect(new ConnectOptions(true, false, false, 1, 60, 0, "auth"), "TEST", new byte[0]));
+    session.trackInbound(new byte[] {6, 2, 0, 0, 1, 0});
+    assertThrows(MqttSnException.class, () -> session.trackOutbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0x19, "OTHER", new byte[0]))));
+    byte[] renewal = MqttSnCodec.encodeAuth(new AuthPacket(2, 0x19, "TEST", new byte[0]));
+    session.trackOutbound(renewal);
+    assertThrows(MqttSnException.class, () -> session.trackOutbound(renewal));
+    assertThrows(MqttSnException.class, () -> session.trackInbound(MqttSnCodec.encodeAuth(new AuthPacket(3, 0, "TEST", new byte[0]))));
+    session.trackInbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0, "TEST", new byte[0])));
+    assertThrows(MqttSnException.class, () -> session.trackInbound(MqttSnCodec.encodeAuth(new AuthPacket(2, 0, "TEST", new byte[0]))));
+  }
+
 }

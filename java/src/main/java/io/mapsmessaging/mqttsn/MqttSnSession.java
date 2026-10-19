@@ -31,6 +31,11 @@ public final class MqttSnSession {
   private ClientState state = ClientState.NONE;
   private int nextPacketIdentifier;
   private int connectPacketIdentifier;
+  private String authenticationMethod;
+  private boolean reauthenticating;
+  private boolean authenticationChallengePending;
+
+
 
   private PacketType outboundRequestType;
   private PacketType expectedResponseType;
@@ -84,6 +89,9 @@ public final class MqttSnSession {
   public boolean canSend(PacketType type) {
     Objects.requireNonNull(type, "type");
 
+    if (reauthenticating) {
+      return type == PacketType.AUTH || type == PacketType.DISCONNECT;
+    }
     return switch (state) {
       case NONE, DISCONNECTED -> allowedWithoutVirtualConnection(type);
       case CONNECTING -> type == PacketType.AUTH
@@ -128,6 +136,7 @@ public final class MqttSnSession {
       connectPacketIdentifier = readU16(packet.body(), 1, "CONNECT Packet Identifier");
       requireNonZero(connectPacketIdentifier, "CONNECT Packet Identifier");
       clearFlows();
+      authenticationMethod = connectAuthenticationMethod(packet.body());
       state = ClientState.CONNECTING;
       return;
     }
@@ -164,6 +173,23 @@ public final class MqttSnSession {
       return;
     }
 
+    if (packet.type() == PacketType.AUTH) {
+      AuthPacket auth = MqttSnCodec.decodeAuth(packet);
+      if (authenticationMethod == null || !authenticationMethod.equals(auth.authenticationMethod())) {
+        throw stateError("AUTH requires the method negotiated in CONNECT");
+      }
+      if (state == ClientState.CONNECTING) {
+        if (auth.reasonCode() != 0x18 || !authenticationChallengePending) {
+          throw stateError("Initial AUTH requires a server challenge");
+        }
+      } else if (auth.reasonCode() != (reauthenticating ? 0x18 : 0x19)
+          || (reauthenticating && !authenticationChallengePending)) {
+        throw stateError("Unexpected re-authentication AUTH");
+      } else {
+        reauthenticating = true;
+      }
+      authenticationChallengePending = false;
+    }
     outboundRequestType = packet.type();
     expectedResponseType = request.expectedResponse();
     outboundPacketIdentifier = request.packetIdentifier();
@@ -209,6 +235,27 @@ public final class MqttSnSession {
       return;
     }
 
+    if (packet.type() == PacketType.AUTH) {
+      AuthPacket auth = MqttSnCodec.decodeAuth(packet);
+      int expectedIdentifier = hasOutboundRequest() ? outboundPacketIdentifier : connectPacketIdentifier;
+      if (authenticationMethod == null || !authenticationMethod.equals(auth.authenticationMethod())
+          || auth.packetIdentifier() != expectedIdentifier
+          || (!hasOutboundRequest() && (state != ClientState.CONNECTING || authenticationChallengePending))
+          || (state != ClientState.CONNECTING && !reauthenticating)
+          || (state == ClientState.CONNECTING && auth.reasonCode() != 0x18)
+          || (reauthenticating && auth.reasonCode() != 0 && auth.reasonCode() != 0x18)) {
+        throw stateError("Unexpected server AUTH");
+      }
+      clearOutbound();
+      authenticationChallengePending = auth.reasonCode() == 0x18;
+      if (auth.reasonCode() == 0) {
+        reauthenticating = false;
+      }
+      return;
+    }
+    if (reauthenticating) {
+      throw stateError("Other packets are paused during re-authentication");
+    }
     if (hasOutboundRequest() && packet.type() == expectedResponseType) {
       int packetIdentifier = responsePacketIdentifier(packet);
       if (packetIdentifier != outboundPacketIdentifier) {
@@ -239,6 +286,25 @@ public final class MqttSnSession {
   public void retryExhausted() {
     clearFlows();
     state = ClientState.DISCONNECTED;
+  }
+
+  private static String connectAuthenticationMethod(ByteBuffer body) {
+    if (body.remaining() < 8) {
+      throw malformed("Truncated CONNECT");
+    }
+    int flags = Byte.toUnsignedInt(body.get(0));
+    if ((flags & 4) == 0) {
+      return null;
+    }
+    int offset = 8 + ((flags & 8) != 0 ? 4 : 0) + ((flags & 16) != 0 ? 2 : 0);
+    if (body.remaining() <= offset) {
+      throw malformed("Truncated CONNECT authentication method");
+    }
+    int length = Byte.toUnsignedInt(body.get(offset++));
+    if (length == 0 || body.remaining() < offset + length) {
+      throw malformed("Truncated CONNECT authentication method");
+    }
+    return MqttSnUtf8.decode(body.slice(offset, length));
   }
 
   private RequestInfo outboundRequestInfo(DecodedPacket packet) {
@@ -394,6 +460,9 @@ public final class MqttSnSession {
   }
 
   private void clearFlows() {
+    authenticationMethod = null;
+    reauthenticating = false;
+    authenticationChallengePending = false;
     clearOutbound();
     clearInbound();
   }

@@ -178,3 +178,43 @@ def test_packet_identifier_wraps_and_retry_exhaustion_disconnects() -> None:
     session.retry_exhausted()
     assert session.state is ClientState.DISCONNECTED
     assert not session.has_outbound_request
+
+
+def test_auth_renewal_pauses_traffic_and_completes_without_connack() -> None:
+    from mqttsn2 import AuthPacket, encode_auth
+    session = Session()
+    session.track_outbound(encode_connect(ConnectOptions(True, False, False, 1, 60, 0, "auth", "TEST", b"")))
+    session.track_inbound(bytes.fromhex("060200000100"))
+    session.track_outbound(encode_auth(AuthPacket(2, 0x19, "TEST", b"")))
+    assert not session.can_send(PacketType.PUBLISH)
+    session.track_inbound(encode_auth(AuthPacket(2, 0x18, "TEST", b"challenge")))
+    session.track_outbound(encode_auth(AuthPacket(3, 0x18, "TEST", b"response")))
+    session.track_inbound(encode_auth(AuthPacket(3, 0, "TEST", b"final")))
+    assert session.state is ClientState.ACTIVE
+    assert session.can_send(PacketType.PUBLISH)
+    assert not session.has_outbound_request
+
+
+def test_auth_renewal_requires_negotiated_method() -> None:
+    from mqttsn2 import AuthPacket, encode_auth
+    session = active_session()
+    with pytest.raises(MqttSnError):
+        session.track_outbound(encode_auth(AuthPacket(2, 0x19, "TEST", b"")))
+
+
+def test_renewal_rejects_changed_method_wrong_identifier_and_auth_retry() -> None:
+    from mqttsn2 import AuthPacket, encode_auth
+    session = Session()
+    session.track_outbound(encode_connect(ConnectOptions(True, False, False, 1, 60, 0, "auth", "TEST", b"")))
+    session.track_inbound(bytes.fromhex("060200000100"))
+    with pytest.raises(MqttSnError):
+        session.track_outbound(encode_auth(AuthPacket(2, 0x19, "OTHER", b"")))
+    renewal = encode_auth(AuthPacket(2, 0x19, "TEST", b""))
+    session.track_outbound(renewal)
+    with pytest.raises(MqttSnError):
+        session.track_outbound(renewal)
+    with pytest.raises(MqttSnError):
+        session.track_inbound(encode_auth(AuthPacket(3, 0, "TEST", b"")))
+    session.track_inbound(encode_auth(AuthPacket(2, 0, "TEST", b"")))
+    with pytest.raises(MqttSnError):
+        session.track_inbound(encode_auth(AuthPacket(2, 0, "TEST", b"")))

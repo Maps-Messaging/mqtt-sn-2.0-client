@@ -138,6 +138,18 @@ class AuthenticationExchange {
     }
   }
 
+  void acceptAuth(const AuthPacket& serverAuth) {
+    const mqttsn_auth_t native{
+        serverAuth.packetIdentifier, serverAuth.reasonCode,
+        reinterpret_cast<const std::uint8_t*>(serverAuth.authenticationMethod.data()), serverAuth.authenticationMethod.size(),
+        serverAuth.authenticationData.data(), serverAuth.authenticationData.size()};
+    std::vector<std::uint8_t> scratch(0xFFFFu);
+    const mqttsn_status_t status = mqttsn_auth_exchange_accept_auth(&exchange_, &native, scratch.data(), scratch.size());
+    if (status != MQTTSN_OK) {
+      throw Error(status);
+    }
+  }
+
   AuthenticationResponse beginReauthentication(std::uint16_t packetIdentifier) {
     std::vector<std::uint8_t> response(0xFFFFu);
     std::size_t written = 0;

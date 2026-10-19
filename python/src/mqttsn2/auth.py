@@ -52,6 +52,8 @@ class AuthenticationExchange:
             raise ValueError("authentication method must contain 1..255 UTF-8 bytes")
         self.mechanism = mechanism
         self.active = False
+        self._reauthenticating = False
+        self._authenticated = False
 
     @property
     def method(self) -> str:
@@ -90,6 +92,8 @@ class AuthenticationExchange:
         )
 
     def accept_connack(self, connack: ConnAck) -> None:
+        if self._reauthenticating:
+            raise MqttSnError("STATE_ERROR", "Re-authentication completes with AUTH, not CONNACK")
         if not self.active:
             return
 
@@ -107,12 +111,26 @@ class AuthenticationExchange:
                     "Authentication mechanism did not complete before successful CONNACK",
                 )
 
+        self._authenticated = connack.reason_code == AUTH_SUCCESS
         self.active = False
 
+    def accept_auth(self, server_auth: AuthPacket) -> None:
+        if (not self.active or not self._reauthenticating
+                or server_auth.reason_code != AUTH_SUCCESS
+                or server_auth.authentication_method != self.method):
+            raise MqttSnError("STATE_ERROR", "Unexpected re-authentication completion")
+        if server_auth.authentication_data:
+            self.mechanism.evaluate_challenge(server_auth.authentication_data)
+        if not self.mechanism.complete:
+            raise MqttSnError("STATE_ERROR", "Authentication mechanism did not complete before successful AUTH")
+        self.active = False
+        self._reauthenticating = False
+
     def begin_reauthentication(self, packet_identifier: int) -> AuthPacket:
-        if self.active:
-            raise MqttSnError("STATE_ERROR", "Authentication exchange is already active")
+        if self.active or not self._authenticated:
+            raise MqttSnError("STATE_ERROR", "Re-authentication requires a successfully authenticated connection")
         self.mechanism.reset()
+        self._reauthenticating = True
         self.active = True
         return AuthPacket(
             packet_identifier,
@@ -124,3 +142,5 @@ class AuthenticationExchange:
     def reset(self) -> None:
         self.mechanism.reset()
         self.active = False
+        self._reauthenticating = False
+        self._authenticated = False
